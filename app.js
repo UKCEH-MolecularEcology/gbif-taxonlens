@@ -590,19 +590,43 @@ function locationPolygon({ lat, lon }, radiusKm = 50) {
   return `POLYGON((${west} ${south}, ${east} ${south}, ${east} ${north}, ${west} ${north}, ${west} ${south}))`;
 }
 
+function distanceKm(a, b) {
+  const radius = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLon = ((b.lon - a.lon) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * radius * Math.asin(Math.sqrt(h));
+}
+
+function plausibilityFromCounts(counts, nearestDistanceKm, totalRecords) {
+  if (!totalRecords) return "Data deficient";
+  if (counts[10] >= 3 || counts[5] >= 1) return "High plausibility";
+  if (counts[50] >= 3 || nearestDistanceKm <= 50) return "Moderate plausibility";
+  if (totalRecords > 0) return "Low plausibility";
+  return "No GBIF support";
+}
+
 async function fetchLocationCheck(result, location) {
   if (!location) return { status: "No coordinates", count: 0, records: [], location: null };
   const params = new URLSearchParams({
     taxon_key: result.usageKey,
     geometry: locationPolygon(location),
     has_coordinate: "true",
-    limit: "10",
+    has_geospatial_issue: "false",
+    occurrence_status: "PRESENT",
+    limit: "300",
   });
   const response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params.toString()}`);
   if (!response.ok) return { status: "Unavailable", count: 0, records: [], location };
   const data = await response.json();
   const records = (data.results || [])
     .filter((item) => Number.isFinite(item.decimalLatitude) && Number.isFinite(item.decimalLongitude))
+    .filter((item) => !item.coordinateUncertaintyInMeters || item.coordinateUncertaintyInMeters <= 10000)
+    .filter((item) => !["FOSSIL_SPECIMEN", "LIVING_SPECIMEN"].includes(item.basisOfRecord))
     .map((item) => ({
       lat: item.decimalLatitude,
       lon: item.decimalLongitude,
@@ -610,13 +634,30 @@ async function fetchLocationCheck(result, location) {
       country: item.country || "",
       year: item.year || "",
       key: item.key || "",
-    }));
+      basisOfRecord: item.basisOfRecord || "",
+      uncertaintyMeters: item.coordinateUncertaintyInMeters || "",
+      distanceKm: distanceKm(location, { lat: item.decimalLatitude, lon: item.decimalLongitude }),
+    }))
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+  const radii = [1, 5, 10, 50];
+  const counts = Object.fromEntries(
+    radii.map((radius) => [radius, records.filter((record) => record.distanceKm <= radius).length]),
+  );
+  const nearest = records[0] || null;
+  const years = records.map((record) => Number(record.year)).filter(Number.isFinite);
+  const mostRecentYear = years.length ? Math.max(...years) : "";
+  const plausibility = plausibilityFromCounts(counts, nearest?.distanceKm ?? Infinity, data.count || records.length);
   return {
-    status: data.count > 0 ? "Nearby records" : "No nearby records",
+    status: plausibility,
     count: data.count || 0,
-    records,
+    qualityFilteredCount: records.length,
+    records: records.slice(0, 50),
     location,
     radiusKm: 50,
+    radii,
+    counts,
+    nearestDistanceKm: nearest ? Number(nearest.distanceKm.toFixed(2)) : "",
+    mostRecentYear,
   };
 }
 
@@ -758,7 +799,7 @@ function renderResults() {
 function locationBadge(row) {
   if (!els.locationCheck.checked && !row.locationCheck) return '<span class="status-pill muted">Not checked</span>';
   const status = row.locationCheck?.status || "Not checked";
-  const good = status === "Nearby records";
+  const good = status === "High plausibility" || status === "Moderate plausibility";
   return `<span class="status-pill ${good ? "linked" : "muted"}">${escapeHtml(status)}</span>`;
 }
 
@@ -807,7 +848,8 @@ function openReviewDrawer(result) {
 function locationSummary(result) {
   if (!result.locationCheck) return "Not checked";
   if (!result.locationCheck.location) return escapeHtml(result.locationCheck.status);
-  return `${escapeHtml(result.locationCheck.status)} within ${escapeHtml(result.locationCheck.radiusKm || 50)} km (${escapeHtml(result.locationCheck.count)} GBIF records)`;
+  const check = result.locationCheck;
+  return `${escapeHtml(check.status)}; nearest record ${escapeHtml(check.nearestDistanceKm || "not found")} km; ${escapeHtml(check.counts?.[10] ?? 0)} records within 10 km, ${escapeHtml(check.counts?.[50] ?? 0)} within 50 km; most recent ${escapeHtml(check.mostRecentYear || "unknown")}`;
 }
 
 function locationSection(result) {
@@ -816,7 +858,41 @@ function locationSection(result) {
   if (!check.location) return `<p class="drawer-muted">${escapeHtml(check.status)}</p>`;
   return `
     <p class="drawer-muted">${locationSummary(result)}</p>
+    <div class="location-score-grid">
+      <div><strong>${escapeHtml(check.counts?.[1] ?? 0)}</strong><span>within 1 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[5] ?? 0)}</strong><span>within 5 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[10] ?? 0)}</strong><span>within 10 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[50] ?? 0)}</strong><span>within 50 km</span></div>
+    </div>
     <div id="locationMap" class="location-map"></div>
+    <p class="drawer-muted">Absence of nearby GBIF records is not evidence of absence. GBIF data are presence-only and reflect recording effort, taxonomic coverage, and data quality.</p>
+    ${occurrenceTable(check)}
+  `;
+}
+
+function occurrenceTable(check) {
+  const records = (check.records || []).slice(0, 10);
+  if (!records.length) return '<p class="drawer-muted">No quality-filtered nearby occurrence records to list.</p>';
+  return `
+    <div class="occurrence-table">
+      <table>
+        <thead><tr><th>Distance</th><th>Year</th><th>Country</th><th>Basis</th></tr></thead>
+        <tbody>
+          ${records
+            .map(
+              (record) => `
+                <tr>
+                  <td>${escapeHtml(record.distanceKm.toFixed(1))} km</td>
+                  <td>${escapeHtml(record.year || "-")}</td>
+                  <td>${escapeHtml(record.country || "-")}</td>
+                  <td>${escapeHtml(record.basisOfRecord || "-")}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -831,12 +907,15 @@ function renderLocationMap(result) {
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
     L.marker([check.location.lat, check.location.lon]).addTo(map).bindPopup("Input location");
-    L.circle([check.location.lat, check.location.lon], {
-      radius: (check.radiusKm || 50) * 1000,
-      color: "#000000",
-      fillColor: "#dbfe52",
-      fillOpacity: 0.12,
-    }).addTo(map);
+    (check.radii || [1, 5, 10, 50]).forEach((radiusKm) => {
+      L.circle([check.location.lat, check.location.lon], {
+        radius: radiusKm * 1000,
+        color: radiusKm === 50 ? "#000000" : "#90a968",
+        weight: radiusKm === 50 ? 2 : 1,
+        fillColor: "#dbfe52",
+        fillOpacity: radiusKm === 50 ? 0.08 : 0.03,
+      }).addTo(map);
+    });
     (check.records || []).forEach((record) => {
       L.circleMarker([record.lat, record.lon], {
         radius: 5,
@@ -872,6 +951,12 @@ function downloadCsv() {
     "wikidataNcbiIds",
     "locationStatus",
     "nearbyGbifOccurrenceCount",
+    "recordsWithin1Km",
+    "recordsWithin5Km",
+    "recordsWithin10Km",
+    "recordsWithin50Km",
+    "nearestGbifRecordKm",
+    "mostRecentNearbyGbifYear",
     "localReferenceMatch",
   ];
   const lines = [
@@ -888,6 +973,18 @@ function downloadCsv() {
                   ? row.locationCheck?.status || ""
                   : field === "nearbyGbifOccurrenceCount"
                     ? row.locationCheck?.count ?? ""
+                    : field === "recordsWithin1Km"
+                      ? row.locationCheck?.counts?.[1] ?? ""
+                      : field === "recordsWithin5Km"
+                        ? row.locationCheck?.counts?.[5] ?? ""
+                        : field === "recordsWithin10Km"
+                          ? row.locationCheck?.counts?.[10] ?? ""
+                          : field === "recordsWithin50Km"
+                            ? row.locationCheck?.counts?.[50] ?? ""
+                            : field === "nearestGbifRecordKm"
+                              ? row.locationCheck?.nearestDistanceKm ?? ""
+                              : field === "mostRecentNearbyGbifYear"
+                                ? row.locationCheck?.mostRecentYear ?? ""
                 : field === "localReferenceMatch"
                   ? row.localMatch?.name || ""
                   : row[field];

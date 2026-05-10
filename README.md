@@ -158,11 +158,27 @@ TaxonLens detects common coordinate columns such as:
 - `lat`
 - `lon`
 
-After a GBIF taxon match is found, TaxonLens asks GBIF whether there are occurrence records for that taxon near the input coordinates. The Details drawer shows an interactive map with:
+After a GBIF taxon match is found, TaxonLens asks GBIF whether there are occurrence records for that taxon near the input coordinates. It applies simple quality filters:
+
+- records must have coordinates
+- records must not have GBIF geospatial issue flags
+- occurrence status must be present
+- records with very large coordinate uncertainty are filtered out
+- fossil and living-specimen records are excluded from the nearby-record summary
+
+The Details drawer shows an interactive map with:
 
 - the input location
-- a 50 km search radius
+- 1, 5, 10 and 50 km radius rings
 - nearby GBIF occurrence points returned by the API
+- a small table of nearby records
+
+TaxonLens also reports:
+
+- nearest quality-filtered GBIF record
+- records within 1, 5, 10 and 50 km
+- most recent nearby record year
+- a plausibility category: `High plausibility`, `Moderate plausibility`, `Low plausibility`, `No GBIF support`, or `Data deficient`
 
 This is a plausibility check, not a definitive species distribution model. A “no nearby records” result may mean the species is genuinely unexpected, but it may also reflect gaps in GBIF occurrence data, sampling effort, taxonomic issues, or coordinate uncertainty.
 
@@ -296,9 +312,15 @@ note
 source
 wikidataStatus
 wikidataNcbiIds
-localReferenceMatch
 locationStatus
 nearbyGbifOccurrenceCount
+recordsWithin1Km
+recordsWithin5Km
+recordsWithin10Km
+recordsWithin50Km
+nearestGbifRecordKm
+mostRecentNearbyGbifYear
+localReferenceMatch
 ```
 
 The most useful fields are usually:
@@ -315,6 +337,9 @@ The most useful fields are usually:
 - `wikidataNcbiIds`: NCBI taxonomy IDs linked from Wikidata, if any
 - `locationStatus`: whether nearby GBIF occurrence records were found
 - `nearbyGbifOccurrenceCount`: number of GBIF records found within the location check radius
+- `recordsWithin1Km`, `recordsWithin5Km`, `recordsWithin10Km`, `recordsWithin50Km`: quality-filtered nearby occurrence counts by radius
+- `nearestGbifRecordKm`: distance to the nearest quality-filtered GBIF record
+- `mostRecentNearbyGbifYear`: most recent year among nearby quality-filtered GBIF records
 - `localReferenceMatch`: the local reference candidate, when local comparison was used
 
 Every processed input row is included in the export. Unmatched rows are retained with `matchType` set to `NONE` and `status` set to `UNMATCHED` when no result can be returned.

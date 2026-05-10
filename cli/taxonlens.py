@@ -53,6 +53,12 @@ OUTPUT_FIELDS = [
     "wikidataNcbiIds",
     "locationStatus",
     "nearbyGbifOccurrenceCount",
+    "recordsWithin1Km",
+    "recordsWithin5Km",
+    "recordsWithin10Km",
+    "recordsWithin50Km",
+    "nearestGbifRecordKm",
+    "mostRecentNearbyGbifYear",
     "localReferenceMatch",
 ]
 
@@ -154,6 +160,12 @@ def unmatched_row(row: dict[str, str], mapping: dict[str, str], row_number: int,
         "wikidataNcbiIds": "",
         "locationStatus": "",
         "nearbyGbifOccurrenceCount": "",
+        "recordsWithin1Km": "",
+        "recordsWithin5Km": "",
+        "recordsWithin10Km": "",
+        "recordsWithin50Km": "",
+        "nearestGbifRecordKm": "",
+        "mostRecentNearbyGbifYear": "",
         "localReferenceMatch": "",
     }
 
@@ -186,6 +198,12 @@ def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str
         "wikidataNcbiIds": "",
         "locationStatus": "",
         "nearbyGbifOccurrenceCount": "",
+        "recordsWithin1Km": "",
+        "recordsWithin5Km": "",
+        "recordsWithin10Km": "",
+        "recordsWithin50Km": "",
+        "nearestGbifRecordKm": "",
+        "mostRecentNearbyGbifYear": "",
         "localReferenceMatch": "",
     }
 

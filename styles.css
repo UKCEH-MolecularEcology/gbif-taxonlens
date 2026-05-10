@@ -903,6 +903,44 @@ pre {
   border-radius: 8px;
 }
 
+.location-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.location-score-grid div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+  padding: 10px;
+}
+
+.location-score-grid strong,
+.location-score-grid span {
+  display: block;
+}
+
+.location-score-grid strong {
+  font-size: 22px;
+}
+
+.location-score-grid span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.occurrence-table {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.occurrence-table table {
+  min-width: 0;
+}
+
 @media (max-width: 860px) {
   .topbar,
   .hero,
