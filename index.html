@@ -253,9 +253,14 @@
             <h2>Notebook and terminal workflow</h2>
             <p>
               New users can run the Colab notebook without installing anything.
-              Advanced users can use the included Python script for reproducible
-              batch jobs and pipelines.
+              Advanced users can run the same matcher from a terminal for large,
+              reproducible batch jobs.
             </p>
+            <ul class="workflow-list">
+              <li>Deduplicates repeated names before calling GBIF.</li>
+              <li>Uses a throttled parallel queue for large taxonomy tables.</li>
+              <li>Can export GBIF matches, location summaries, and nearby occurrence records.</li>
+            </ul>
           </div>
           <div class="notebook-actions">
             <a
@@ -264,7 +269,20 @@
               target="_blank"
               rel="noreferrer"
             >Open Colab notebook</a>
-            <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
+            <div class="command-grid" aria-label="Terminal command examples">
+              <article class="command-card">
+                <span>Quick match</span>
+                <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
+              </article>
+              <article class="command-card">
+                <span>Large table</span>
+                <pre><code>python3 cli/taxonlens.py input.csv --concurrency 8 --out matched.csv</code></pre>
+              </article>
+              <article class="command-card wide">
+                <span>Location outputs</span>
+                <pre><code>python3 cli/taxonlens.py input.csv --location-check --out matched.csv --location-summary-out locations.csv --occurrences-out occurrences.csv</code></pre>
+              </article>
+            </div>
           </div>
         </section>
       </main>
