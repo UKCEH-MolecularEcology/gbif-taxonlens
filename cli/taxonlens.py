@@ -34,6 +34,7 @@ ALIASES = {
 }
 
 OUTPUT_FIELDS = [
+    "inputRow",
     "inputName",
     "matchedName",
     "canonicalName",
@@ -130,12 +131,39 @@ def build_params(row: dict[str, str], mapping: dict[str, str], default_kingdom: 
     return urllib.parse.urlencode(params)
 
 
-def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str) -> dict[str, str]:
+def unmatched_row(row: dict[str, str], mapping: dict[str, str], row_number: int, note: str) -> dict[str, str]:
+    return {
+        "inputRow": row_number,
+        "inputName": scientific_name_for_row(row, mapping),
+        "matchedName": "",
+        "canonicalName": "",
+        "matchType": "NONE",
+        "confidence": 0,
+        "status": "UNMATCHED",
+        "rank": "",
+        "usageKey": "",
+        "acceptedUsageKey": "",
+        "acceptedScientificName": "",
+        "kingdom": "",
+        "family": "",
+        "note": note,
+        "source": "Unmatched",
+        "wikidataStatus": "",
+        "wikidataNcbiIds": "",
+        "localReferenceMatch": "",
+    }
+
+
+def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str, row_number: int) -> dict[str, str]:
     params = build_params(row, mapping, default_kingdom)
     url = f"https://api.gbif.org/v1/species/match?{params}"
-    with urllib.request.urlopen(url, timeout=30) as response:
-        match = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            match = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return unmatched_row(row, mapping, row_number, f"GBIF request failed: {exc}")
     return {
+        "inputRow": row_number,
         "inputName": scientific_name_for_row(row, mapping),
         "matchedName": match.get("scientificName", ""),
         "canonicalName": match.get("canonicalName", ""),
@@ -185,7 +213,7 @@ def main() -> int:
             f"Matching {index}/{len(rows_to_match)}: {scientific_name_for_row(row, mapping)}",
             file=sys.stderr,
         )
-        results.append(match_row(row, mapping, args.default_kingdom))
+        results.append(match_row(row, mapping, args.default_kingdom, index))
         time.sleep(args.sleep)
 
     with args.out.open("w", newline="", encoding="utf-8") as handle:

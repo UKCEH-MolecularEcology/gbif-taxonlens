@@ -255,6 +255,7 @@ Treat TaxonLens results as a GBIF name-matching review table, not as proof that 
 Exports include:
 
 ```text
+inputRow
 inputName
 matchedName
 canonicalName
@@ -276,6 +277,7 @@ localReferenceMatch
 
 The most useful fields are usually:
 
+- `inputRow`: the original row number in the processed input file
 - `inputName`: the name TaxonLens sent to GBIF
 - `matchedName`: the GBIF name returned
 - `matchType`: how GBIF matched it
@@ -286,6 +288,8 @@ The most useful fields are usually:
 - `wikidataStatus`: whether a Wikidata item was found for the matched GBIF ID
 - `wikidataNcbiIds`: NCBI taxonomy IDs linked from Wikidata, if any
 - `localReferenceMatch`: the local reference candidate, when local comparison was used
+
+Every processed input row is included in the export. Unmatched rows are retained with `matchType` set to `NONE` and `status` set to `UNMATCHED` when no result can be returned.
 
 ## Match Types
 

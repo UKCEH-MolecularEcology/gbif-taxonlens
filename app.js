@@ -431,18 +431,23 @@ async function runMatching() {
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     let result;
-    if (mode === "local") {
-      result = formatLocalResult(row, matchLocalReference(row));
-    } else {
-      const params = buildMatchParams(row);
-      const response = await fetch(`https://api.gbif.org/v1/species/match?${params.toString()}`);
-      const match = await response.json();
-      result = formatResult(row, match);
-      result.alternatives = await fetchGbifAlternatives(result);
-      if (mode === "both") result.localMatch = matchLocalReference(row);
-      if (els.wikidataCheck.checked && result.usageKey) {
-        result.wikidata = await fetchWikidataLinks(result.usageKey);
+    try {
+      if (mode === "local") {
+        result = formatLocalResult(row, matchLocalReference(row), index + 1);
+      } else {
+        const params = buildMatchParams(row);
+        const response = await fetch(`https://api.gbif.org/v1/species/match?${params.toString()}`);
+        if (!response.ok) throw new Error(`GBIF request failed: ${response.status}`);
+        const match = await response.json();
+        result = formatResult(row, match, index + 1);
+        result.alternatives = await fetchGbifAlternatives(result);
+        if (mode === "both") result.localMatch = matchLocalReference(row);
+        if (els.wikidataCheck.checked && result.usageKey) {
+          result.wikidata = await fetchWikidataLinks(result.usageKey);
+        }
       }
+    } catch (error) {
+      result = formatUnmatchedResult(row, index + 1, error.message);
     }
     state.results.push(result);
     els.previewStatus.textContent = `${index + 1}/${rows.length}`;
@@ -454,10 +459,18 @@ async function runMatching() {
   els.downloadButton.disabled = state.results.length === 0;
 }
 
-function formatResult(row, match) {
+function baseResult(row, rowNumber) {
   const inputName = scientificNameForRow(row);
   return {
+    inputRow: rowNumber,
     inputName,
+    originalValues: row,
+  };
+}
+
+function formatResult(row, match, rowNumber) {
+  return {
+    ...baseResult(row, rowNumber),
     matchedName: match.scientificName || "",
     canonicalName: match.canonicalName || "",
     matchType: match.matchType || "NONE",
@@ -477,10 +490,9 @@ function formatResult(row, match) {
   };
 }
 
-function formatLocalResult(row, localMatch) {
-  const inputName = scientificNameForRow(row);
+function formatLocalResult(row, localMatch, rowNumber) {
   return {
-    inputName,
+    ...baseResult(row, rowNumber),
     matchedName: localMatch?.name || "",
     canonicalName: localMatch?.canonical || "",
     matchType: localMatch?.matchType || "NONE",
@@ -497,6 +509,28 @@ function formatLocalResult(row, localMatch) {
     alternatives: localMatch?.alternatives || [],
     wikidata: null,
     localMatch,
+  };
+}
+
+function formatUnmatchedResult(row, rowNumber, note = "No match returned") {
+  return {
+    ...baseResult(row, rowNumber),
+    matchedName: "",
+    canonicalName: "",
+    matchType: "NONE",
+    confidence: 0,
+    status: "UNMATCHED",
+    rank: "",
+    usageKey: "",
+    acceptedUsageKey: "",
+    acceptedScientificName: "",
+    kingdom: "",
+    family: "",
+    note,
+    source: "Unmatched",
+    alternatives: [],
+    wikidata: null,
+    localMatch: null,
   };
 }
 
@@ -661,6 +695,7 @@ function openReviewDrawer(result) {
 
 function downloadCsv() {
   const headers = [
+    "inputRow",
     "inputName",
     "matchedName",
     "canonicalName",
