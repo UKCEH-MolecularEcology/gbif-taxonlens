@@ -31,6 +31,7 @@ GBIF TaxonLens reads a taxonomy file, tries to detect useful columns, and sends 
 - accepted GBIF name where available
 - alternative candidates for manual review
 - optional Wikidata links to GBIF and NCBI identifiers
+- optional location plausibility checks against nearby GBIF occurrence records
 
 The goal is not to replace taxonomic judgement. The goal is to make the easy cases quick and the uncertain cases obvious.
 
@@ -143,6 +144,27 @@ For each matched GBIF ID, TaxonLens queries Wikidata for linked identifiers:
 This is a useful audit step when you want to link GBIF-based names to sequence databases or check whether community identifiers agree. Wikidata results should still be reviewed, especially for homonyms and synonyms.
 
 When enabled, the results table shows a visible Wikidata status column and any linked NCBI taxonomy IDs. The same values are included in downloaded CSV exports.
+
+## Location Plausibility Checking
+
+Turn on **Location plausibility check** if your input file has latitude and longitude columns.
+
+TaxonLens detects common coordinate columns such as:
+
+- `decimalLatitude`
+- `decimalLongitude`
+- `latitude`
+- `longitude`
+- `lat`
+- `lon`
+
+After a GBIF taxon match is found, TaxonLens asks GBIF whether there are occurrence records for that taxon near the input coordinates. The Details drawer shows an interactive map with:
+
+- the input location
+- a 50 km search radius
+- nearby GBIF occurrence points returned by the API
+
+This is a plausibility check, not a definitive species distribution model. A “no nearby records” result may mean the species is genuinely unexpected, but it may also reflect gaps in GBIF occurrence data, sampling effort, taxonomic issues, or coordinate uncertainty.
 
 ## Use It From The Terminal
 
@@ -275,6 +297,8 @@ source
 wikidataStatus
 wikidataNcbiIds
 localReferenceMatch
+locationStatus
+nearbyGbifOccurrenceCount
 ```
 
 The most useful fields are usually:
@@ -289,6 +313,8 @@ The most useful fields are usually:
 - `source`: whether the result came from GBIF or a local reference file
 - `wikidataStatus`: whether a Wikidata item was found for the matched GBIF ID
 - `wikidataNcbiIds`: NCBI taxonomy IDs linked from Wikidata, if any
+- `locationStatus`: whether nearby GBIF occurrence records were found
+- `nearbyGbifOccurrenceCount`: number of GBIF records found within the location check radius
 - `localReferenceMatch`: the local reference candidate, when local comparison was used
 
 Every processed input row is included in the export. Unmatched rows are retained with `matchType` set to `NONE` and `status` set to `UNMATCHED` when no result can be returned.

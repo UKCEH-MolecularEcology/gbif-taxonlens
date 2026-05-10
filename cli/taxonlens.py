@@ -51,6 +51,8 @@ OUTPUT_FIELDS = [
     "source",
     "wikidataStatus",
     "wikidataNcbiIds",
+    "locationStatus",
+    "nearbyGbifOccurrenceCount",
     "localReferenceMatch",
 ]
 
@@ -150,6 +152,8 @@ def unmatched_row(row: dict[str, str], mapping: dict[str, str], row_number: int,
         "source": "Unmatched",
         "wikidataStatus": "",
         "wikidataNcbiIds": "",
+        "locationStatus": "",
+        "nearbyGbifOccurrenceCount": "",
         "localReferenceMatch": "",
     }
 
@@ -180,6 +184,8 @@ def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str
         "source": "GBIF",
         "wikidataStatus": "",
         "wikidataNcbiIds": "",
+        "locationStatus": "",
+        "nearbyGbifOccurrenceCount": "",
         "localReferenceMatch": "",
     }
 

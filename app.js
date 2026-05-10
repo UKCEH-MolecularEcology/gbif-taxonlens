@@ -25,6 +25,9 @@ const editableFields = [
   "taxonRank",
   "authorship",
   "taxonID",
+  "decimalLatitude",
+  "decimalLongitude",
+  "country",
 ];
 
 const aliases = {
@@ -58,6 +61,9 @@ const aliases = {
   genus: ["genus", "genericname", "generic_name"],
   specificEpithet: ["specificepithet", "specific_epithet", "epithet"],
   infraspecificEpithet: ["infraspecificepithet", "infra_epithet"],
+  decimalLatitude: ["decimallatitude", "decimal_latitude", "latitude", "lat"],
+  decimalLongitude: ["decimallongitude", "decimal_longitude", "longitude", "lon", "lng", "long"],
+  country: ["country", "countrycode", "country_code"],
 };
 
 const demoCsv = `id,scientificName,kingdom,family,taxonRank
@@ -78,6 +84,11 @@ const els = {
   referenceStatus: document.querySelector("#referenceStatus"),
   matchMode: document.querySelector("#matchMode"),
   wikidataCheck: document.querySelector("#wikidataCheck"),
+  locationCheck: document.querySelector("#locationCheck"),
+  progressWrap: document.querySelector("#progressWrap"),
+  progressBar: document.querySelector("#progressBar"),
+  progressLabel: document.querySelector("#progressLabel"),
+  progressCount: document.querySelector("#progressCount"),
   reviewDrawer: document.querySelector("#reviewDrawer"),
   drawerClose: document.querySelector("#drawerClose"),
   drawerContent: document.querySelector("#drawerContent"),
@@ -218,6 +229,12 @@ function healthCheck(rows, mapping) {
   if (!mapping.authorship) {
     health.push("No authorship column detected; author mismatches cannot be audited locally.");
   }
+  if (mapping.decimalLatitude && !mapping.decimalLongitude) {
+    health.push("Latitude detected without longitude; location checks need both coordinates.");
+  }
+  if (mapping.decimalLongitude && !mapping.decimalLatitude) {
+    health.push("Longitude detected without latitude; location checks need both coordinates.");
+  }
   if (idColumn && parentColumn) {
     const ids = new Set(rows.map((row) => row[idColumn]).filter(Boolean));
     const missingParents = rows.filter(
@@ -257,6 +274,14 @@ function scientificNameForRow(row) {
   if (genus && supplied && /^[a-z][A-Za-z-]+$/.test(supplied)) return `${genus} ${supplied}`;
   if (genus && specific) return `${genus} ${specific}`;
   return supplied || genus;
+}
+
+function locationForRow(row) {
+  const lat = Number.parseFloat(getMappedValue(row, "decimalLatitude"));
+  const lon = Number.parseFloat(getMappedValue(row, "decimalLongitude"));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+  return { lat, lon };
 }
 
 function renderMapping() {
@@ -343,6 +368,9 @@ function fieldLabel(field) {
     genus: "Genus",
     specificEpithet: "Specific epithet",
     infraspecificEpithet: "Infraspecific epithet",
+    decimalLatitude: "Latitude",
+    decimalLongitude: "Longitude",
+    country: "Country",
   };
   return labels[field] || field;
 }
@@ -371,6 +399,8 @@ function loadText(text) {
   els.clearButton.disabled = false;
   els.downloadButton.disabled = true;
   els.previewStatus.textContent = state.mapping.scientificName ? "Detected" : "Needs mapping";
+  els.progressWrap.hidden = true;
+  els.progressBar.style.width = "0";
   renderMapping();
   renderResults();
 }
@@ -382,6 +412,14 @@ function updateRunButtonLabel() {
     both: "Match GBIF + local",
   };
   els.runButton.textContent = labels[els.matchMode.value] || labels.gbif;
+}
+
+function updateProgress(done, total, label = "Matching") {
+  const percent = total ? Math.round((done / total) * 100) : 0;
+  els.progressWrap.hidden = false;
+  els.progressLabel.textContent = label;
+  els.progressCount.textContent = `${percent}%`;
+  els.progressBar.style.width = `${percent}%`;
 }
 
 async function handleReferenceFile(file) {
@@ -427,6 +465,7 @@ async function runMatching() {
   state.results = [];
   els.runButton.disabled = true;
   els.previewStatus.textContent = mode === "local" ? "Comparing" : "Matching";
+  updateProgress(0, rows.length, mode === "local" ? "Comparing local reference" : "Checking taxonomy");
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
@@ -445,12 +484,16 @@ async function runMatching() {
         if (els.wikidataCheck.checked && result.usageKey) {
           result.wikidata = await fetchWikidataLinks(result.usageKey);
         }
+        if (els.locationCheck.checked && result.usageKey) {
+          result.locationCheck = await fetchLocationCheck(result, locationForRow(row));
+        }
       }
     } catch (error) {
       result = formatUnmatchedResult(row, index + 1, error.message);
     }
     state.results.push(result);
     els.previewStatus.textContent = `${index + 1}/${rows.length}`;
+    updateProgress(index + 1, rows.length, mode === "local" ? "Comparing local reference" : "Checking taxonomy");
     renderResults();
   }
 
@@ -487,6 +530,7 @@ function formatResult(row, match, rowNumber) {
     alternatives: match.alternatives || match.alternativeMatches || [],
     wikidata: null,
     localMatch: null,
+    locationCheck: null,
   };
 }
 
@@ -509,6 +553,7 @@ function formatLocalResult(row, localMatch, rowNumber) {
     alternatives: localMatch?.alternatives || [],
     wikidata: null,
     localMatch,
+    locationCheck: null,
   };
 }
 
@@ -531,6 +576,47 @@ function formatUnmatchedResult(row, rowNumber, note = "No match returned") {
     alternatives: [],
     wikidata: null,
     localMatch: null,
+    locationCheck: null,
+  };
+}
+
+function locationPolygon({ lat, lon }, radiusKm = 50) {
+  const latDelta = radiusKm / 111.32;
+  const lonDelta = radiusKm / (111.32 * Math.cos((lat * Math.PI) / 180) || 1);
+  const west = lon - lonDelta;
+  const east = lon + lonDelta;
+  const south = lat - latDelta;
+  const north = lat + latDelta;
+  return `POLYGON((${west} ${south}, ${east} ${south}, ${east} ${north}, ${west} ${north}, ${west} ${south}))`;
+}
+
+async function fetchLocationCheck(result, location) {
+  if (!location) return { status: "No coordinates", count: 0, records: [], location: null };
+  const params = new URLSearchParams({
+    taxon_key: result.usageKey,
+    geometry: locationPolygon(location),
+    has_coordinate: "true",
+    limit: "10",
+  });
+  const response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params.toString()}`);
+  if (!response.ok) return { status: "Unavailable", count: 0, records: [], location };
+  const data = await response.json();
+  const records = (data.results || [])
+    .filter((item) => Number.isFinite(item.decimalLatitude) && Number.isFinite(item.decimalLongitude))
+    .map((item) => ({
+      lat: item.decimalLatitude,
+      lon: item.decimalLongitude,
+      name: item.scientificName || "",
+      country: item.country || "",
+      year: item.year || "",
+      key: item.key || "",
+    }));
+  return {
+    status: data.count > 0 ? "Nearby records" : "No nearby records",
+    count: data.count || 0,
+    records,
+    location,
+    radiusKm: 50,
   };
 }
 
@@ -637,7 +723,7 @@ function renderResults() {
   );
 
   if (!rows.length) {
-    els.resultsBody.innerHTML = '<tr><td colspan="10" class="empty-cell">No matches yet.</td></tr>';
+    els.resultsBody.innerHTML = '<tr><td colspan="11" class="empty-cell">No matches yet.</td></tr>';
     return;
   }
 
@@ -654,6 +740,7 @@ function renderResults() {
           <td>${escapeHtml(row.usageKey)}</td>
           <td>${wikidataBadge(row)}</td>
           <td>${escapeHtml(ncbiIds(row) || "-")}</td>
+          <td>${locationBadge(row)}</td>
           <td><button class="button secondary mini review-button" data-name="${escapeHtml(row.inputName)}">Details</button></td>
         </tr>
       `,
@@ -666,6 +753,13 @@ function renderResults() {
       if (result) openReviewDrawer(result);
     });
   });
+}
+
+function locationBadge(row) {
+  if (!els.locationCheck.checked && !row.locationCheck) return '<span class="status-pill muted">Not checked</span>';
+  const status = row.locationCheck?.status || "Not checked";
+  const good = status === "Nearby records";
+  return `<span class="status-pill ${good ? "linked" : "muted"}">${escapeHtml(status)}</span>`;
 }
 
 function ncbiIds(row) {
@@ -692,6 +786,7 @@ function openReviewDrawer(result) {
       <dt>Note</dt><dd>${escapeHtml(result.note || "None")}</dd>
       <dt>Local reference</dt><dd>${result.localMatch ? `${escapeHtml(result.localMatch.name)} (${result.localMatch.confidence})` : "Not used or no match"}</dd>
       <dt>Wikidata</dt><dd>${escapeHtml(result.wikidata?.status || "Not checked")}</dd>
+      <dt>Location</dt><dd>${locationSummary(result)}</dd>
     </dl>
     <h4>Alternative candidates</h4>
     ${alternatives.length ? `<ul class="candidate-list">${alternatives
@@ -701,9 +796,59 @@ function openReviewDrawer(result) {
     ${wikidataLinks.length ? `<ul class="candidate-list">${wikidataLinks
       .map((item) => `<li><a href="${escapeHtml(item.item)}" target="_blank" rel="noreferrer">${escapeHtml(item.label || item.item)}</a><span>GBIF ${escapeHtml(item.gbif || "-")} / NCBI ${escapeHtml(item.ncbi || "-")}</span></li>`)
       .join("")}</ul>` : '<p class="drawer-muted">No Wikidata links available.</p>'}
+    <h4>Location plausibility</h4>
+    ${locationSection(result)}
   `;
   els.reviewDrawer.classList.add("open");
   els.reviewDrawer.setAttribute("aria-hidden", "false");
+  renderLocationMap(result);
+}
+
+function locationSummary(result) {
+  if (!result.locationCheck) return "Not checked";
+  if (!result.locationCheck.location) return escapeHtml(result.locationCheck.status);
+  return `${escapeHtml(result.locationCheck.status)} within ${escapeHtml(result.locationCheck.radiusKm || 50)} km (${escapeHtml(result.locationCheck.count)} GBIF records)`;
+}
+
+function locationSection(result) {
+  const check = result.locationCheck;
+  if (!check) return '<p class="drawer-muted">Location check was not enabled.</p>';
+  if (!check.location) return `<p class="drawer-muted">${escapeHtml(check.status)}</p>`;
+  return `
+    <p class="drawer-muted">${locationSummary(result)}</p>
+    <div id="locationMap" class="location-map"></div>
+  `;
+}
+
+function renderLocationMap(result) {
+  const check = result.locationCheck;
+  const mapEl = document.querySelector("#locationMap");
+  if (!mapEl || !check?.location || !window.L) return;
+  setTimeout(() => {
+    const map = L.map(mapEl).setView([check.location.lat, check.location.lon], 7);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    L.marker([check.location.lat, check.location.lon]).addTo(map).bindPopup("Input location");
+    L.circle([check.location.lat, check.location.lon], {
+      radius: (check.radiusKm || 50) * 1000,
+      color: "#000000",
+      fillColor: "#dbfe52",
+      fillOpacity: 0.12,
+    }).addTo(map);
+    (check.records || []).forEach((record) => {
+      L.circleMarker([record.lat, record.lon], {
+        radius: 5,
+        color: "#477ae2",
+        fillColor: "#477ae2",
+        fillOpacity: 0.75,
+      })
+        .addTo(map)
+        .bindPopup(`${escapeHtml(record.name)}<br>${escapeHtml(record.country)} ${escapeHtml(record.year)}`);
+    });
+    map.invalidateSize();
+  }, 80);
 }
 
 function downloadCsv() {
@@ -725,6 +870,8 @@ function downloadCsv() {
     "source",
     "wikidataStatus",
     "wikidataNcbiIds",
+    "locationStatus",
+    "nearbyGbifOccurrenceCount",
     "localReferenceMatch",
   ];
   const lines = [
@@ -737,6 +884,10 @@ function downloadCsv() {
               ? row.wikidata?.status || ""
               : field === "wikidataNcbiIds"
                 ? (row.wikidata?.links || []).map((item) => item.ncbi).filter(Boolean).join("|")
+                : field === "locationStatus"
+                  ? row.locationCheck?.status || ""
+                  : field === "nearbyGbifOccurrenceCount"
+                    ? row.locationCheck?.count ?? ""
                 : field === "localReferenceMatch"
                   ? row.localMatch?.name || ""
                   : row[field];
@@ -804,6 +955,8 @@ els.clearButton.addEventListener("click", () => {
   els.clearButton.disabled = true;
   els.downloadButton.disabled = true;
   els.previewStatus.textContent = "Ready";
+  els.progressWrap.hidden = true;
+  els.progressBar.style.width = "0";
   els.referenceStatus.textContent =
     "Optional: upload a pinned GBIF Backbone extract, curated checklist, or second taxonomy table.";
   renderMapping();

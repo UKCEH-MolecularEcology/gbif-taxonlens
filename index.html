@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GBIF TaxonLens</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQy1q8v7Xc+5qGqsO/MiqM6y6GZb9rU="
+      crossorigin=""
+    />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -131,10 +137,26 @@
                     <small>Look for linked GBIF and NCBI taxonomy identifiers after matching.</small>
                   </span>
                 </label>
+                <label class="check-row">
+                  <input id="locationCheck" type="checkbox" />
+                  <span>
+                    <strong>Location plausibility check</strong>
+                    <small>If latitude and longitude are present, look for nearby GBIF occurrences and show them on a map.</small>
+                  </span>
+                </label>
               </div>
               <div class="action-stack">
                 <button class="button primary full" id="runButton" disabled>Match with GBIF</button>
                 <button class="button secondary full" id="demoButton">Load demo file</button>
+              </div>
+              <div class="progress-wrap" id="progressWrap" hidden>
+                <div class="progress-meta">
+                  <span id="progressLabel">Preparing</span>
+                  <strong id="progressCount">0%</strong>
+                </div>
+                <div class="progress-track">
+                  <span id="progressBar"></span>
+                </div>
               </div>
             </section>
 
@@ -194,12 +216,13 @@
                   <th>GBIF key</th>
                   <th>Wikidata</th>
                   <th>NCBI IDs</th>
+                  <th>Location</th>
                   <th>Review</th>
                 </tr>
               </thead>
               <tbody id="resultsBody">
                 <tr>
-                  <td colspan="10" class="empty-cell">No matches yet.</td>
+                  <td colspan="11" class="empty-cell">No matches yet.</td>
                 </tr>
               </tbody>
             </table>
@@ -242,6 +265,11 @@
       </footer>
     </div>
 
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script src="app.js"></script>
   </body>
 </html>
