@@ -78,7 +78,7 @@ a {
 }
 
 .brand-logo {
-  width: 154px;
+  width: 126px;
   height: auto;
   display: block;
 }
@@ -115,24 +115,24 @@ a {
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
   gap: 48px;
   align-items: center;
-  min-height: 610px;
-  padding: 44px 0 72px;
+  min-height: 520px;
+  padding: 30px 0 58px;
 }
 
 .hero h1 {
-  max-width: 780px;
+  max-width: 760px;
   margin: 0;
-  font-size: clamp(48px, 7vw, 84px);
-  line-height: 0.96;
+  font-size: clamp(42px, 5.2vw, 64px);
+  line-height: 1.05;
   letter-spacing: 0;
 }
 
 .hero p {
   max-width: 650px;
-  margin: 24px 0 0;
+  margin: 22px 0 0;
   color: var(--muted);
-  font-size: 19px;
-  line-height: 1.6;
+  font-size: 18px;
+  line-height: 1.55;
 }
 
 .hero-actions,
@@ -569,7 +569,7 @@ pre {
   }
 
   .brand-logo {
-    width: 118px;
+    width: 108px;
   }
 
   .topnav {
