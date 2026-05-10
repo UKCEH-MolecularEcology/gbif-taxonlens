@@ -6,13 +6,19 @@
   --panel: #ffffff;
   --panel-strong: #f3f5f1;
   --black: #000000;
-  --lime: #d8ff2f;
+  --white: #ffffff;
+  --land: #90a968;
+  --air: #d6eae6;
+  --earth: #d7b7aa;
+  --water: #477ae2;
+  --data: #dbfe52;
+  --lime: var(--data);
   --lime-dark: #a5cf00;
   --accent: #000000;
   --accent-dark: #262626;
   --gold: #ffb800;
   --coral: #ff5c39;
-  --blue: #1570ef;
+  --blue: var(--water);
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.12);
   color-scheme: light;
   font-family:
@@ -31,7 +37,7 @@ html {
 body {
   margin: 0;
   background:
-    linear-gradient(180deg, rgba(216, 255, 47, 0.16), transparent 28rem),
+    linear-gradient(180deg, rgba(219, 254, 82, 0.2), transparent 28rem),
     var(--bg);
   color: var(--ink);
 }

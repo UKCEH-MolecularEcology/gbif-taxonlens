@@ -12,6 +12,10 @@ It includes:
 - CSV export.
 - A Python command-line script for advanced users.
 
+The interface uses the UKCEH core palette from the colour guidelines: Black
+`#000000`, White `#FFFFFF`, Land `#90A968`, Air `#D6EAE6`, Earth `#D7B7AA`,
+Water `#477AE2`, and Data `#DBFE52`.
+
 ## Web Portal
 
 Open `index.html` in a browser, or publish the folder through GitHub Pages.
