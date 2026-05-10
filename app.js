@@ -13,6 +13,18 @@ const state = {
   },
 };
 
+const CACHE_PREFIX = "gbifTaxonLens";
+const CACHE_LIMIT = 2500;
+const GBIF_CONCURRENCY = 8;
+const ENRICHMENT_CONCURRENCY = 4;
+
+const caches = {
+  gbifMatch: loadCache("gbifMatch.v1"),
+  gbifAlternatives: loadCache("gbifAlternatives.v1"),
+  wikidata: loadCache("wikidata.v1"),
+  location: loadCache("location.v1"),
+};
+
 const editableFields = [
   "scientificName",
   "kingdom",
@@ -386,6 +398,53 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function loadCache(name) {
+  try {
+    return JSON.parse(localStorage.getItem(`${CACHE_PREFIX}.${name}`) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveCache(name, cache) {
+  const entries = Object.entries(cache);
+  const trimmed = Object.fromEntries(entries.slice(Math.max(0, entries.length - CACHE_LIMIT)));
+  Object.keys(cache).forEach((key) => {
+    delete cache[key];
+  });
+  Object.assign(cache, trimmed);
+  try {
+    localStorage.setItem(`${CACHE_PREFIX}.${name}`, JSON.stringify(cache));
+  } catch {
+    // If browser storage is full or unavailable, the app still works with in-memory caching.
+  }
+}
+
+function cacheGet(cache, key) {
+  return cache[key] ? JSON.parse(JSON.stringify(cache[key])) : null;
+}
+
+function cacheSet(name, cache, key, value) {
+  cache[key] = JSON.parse(JSON.stringify(value));
+  saveCache(name, cache);
+}
+
+async function runQueue(items, concurrency, worker, onDone) {
+  let cursor = 0;
+  let done = 0;
+  const workerCount = Math.min(concurrency, items.length || 1);
+  async function next() {
+    while (cursor < items.length) {
+      const item = items[cursor];
+      cursor += 1;
+      await worker(item);
+      done += 1;
+      onDone?.(done, items.length);
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, next));
+}
+
 async function handleFile(file) {
   const text = await file.text();
   loadText(text);
@@ -458,6 +517,55 @@ function buildMatchParams(row) {
   return params;
 }
 
+function matchCacheKey(row) {
+  return buildMatchParams(row).toString();
+}
+
+async function fetchGbifMatchCached(row) {
+  const key = matchCacheKey(row);
+  const cached = cacheGet(caches.gbifMatch, key);
+  if (cached) return { match: cached, cached: true };
+  const params = buildMatchParams(row);
+  const response = await fetch(`https://api.gbif.org/v1/species/match?${params.toString()}`);
+  if (!response.ok) throw new Error(`GBIF request failed: ${response.status}`);
+  const match = await response.json();
+  cacheSet("gbifMatch.v1", caches.gbifMatch, key, match);
+  return { match, cached: false };
+}
+
+async function fetchGbifAlternativesCached(result) {
+  if (!result.inputName || result.matchType === "EXACT") return [];
+  const key = result.inputName.toLowerCase();
+  const cached = cacheGet(caches.gbifAlternatives, key);
+  if (cached) return cached;
+  const alternatives = await fetchGbifAlternatives(result);
+  cacheSet("gbifAlternatives.v1", caches.gbifAlternatives, key, alternatives);
+  return alternatives;
+}
+
+async function fetchWikidataLinksCached(gbifId) {
+  const key = String(gbifId);
+  const cached = cacheGet(caches.wikidata, key);
+  if (cached) return cached;
+  const links = await fetchWikidataLinks(gbifId);
+  cacheSet("wikidata.v1", caches.wikidata, key, links);
+  return links;
+}
+
+function locationCacheKey(result, location) {
+  if (!location) return `${result.usageKey || result.acceptedUsageKey || "none"}:no-coordinates`;
+  return `${result.usageKey || result.acceptedUsageKey}:${location.lat.toFixed(5)},${location.lon.toFixed(5)}`;
+}
+
+async function fetchLocationCheckCached(result, location) {
+  const key = locationCacheKey(result, location);
+  const cached = cacheGet(caches.location, key);
+  if (cached) return cached;
+  const check = await fetchLocationCheck(result, location);
+  cacheSet("location.v1", caches.location, key, check);
+  return check;
+}
+
 async function runMatching() {
   const maxRows = Number(els.maxRows.value || 250);
   const rows = state.rows.slice(0, maxRows);
@@ -470,36 +578,61 @@ async function runMatching() {
   state.results = [];
   els.runButton.disabled = true;
   els.previewStatus.textContent = mode === "local" ? "Comparing" : "Matching";
-  updateProgress(0, rows.length, mode === "local" ? "Comparing local reference" : "Checking taxonomy");
 
-  for (let index = 0; index < rows.length; index += 1) {
-    const row = rows[index];
-    let result;
-    try {
-      if (mode === "local") {
-        result = formatLocalResult(row, matchLocalReference(row), index + 1);
-      } else {
-        const params = buildMatchParams(row);
-        const response = await fetch(`https://api.gbif.org/v1/species/match?${params.toString()}`);
-        if (!response.ok) throw new Error(`GBIF request failed: ${response.status}`);
-        const match = await response.json();
-        result = formatResult(row, match, index + 1);
-        result.alternatives = await fetchGbifAlternatives(result);
-        if (mode === "both") result.localMatch = matchLocalReference(row);
-        if (els.wikidataCheck.checked && result.usageKey) {
-          result.wikidata = await fetchWikidataLinks(result.usageKey);
-        }
-        if (els.locationCheck.checked && result.usageKey) {
-          result.locationCheck = await fetchLocationCheck(result, locationForRow(row));
-        }
-      }
-    } catch (error) {
-      result = formatUnmatchedResult(row, index + 1, error.message);
-    }
-    state.results.push(result);
-    els.previewStatus.textContent = `${index + 1}/${rows.length}`;
-    updateProgress(index + 1, rows.length, mode === "local" ? "Comparing local reference" : "Checking taxonomy");
+  if (mode === "local") {
+    updateProgress(0, rows.length, "Comparing local reference");
+    state.results = rows.map((row, index) => formatLocalResult(row, matchLocalReference(row), index + 1));
+    updateProgress(rows.length, rows.length, "Comparing local reference");
     renderResults();
+  } else {
+    const uniqueMatches = Array.from(
+      rows
+        .reduce((map, row) => {
+          const key = matchCacheKey(row);
+          if (!map.has(key)) map.set(key, row);
+          return map;
+        }, new Map())
+        .entries(),
+    ).map(([key, row]) => ({ key, row }));
+    const matchLookup = new Map();
+    let cachedMatches = 0;
+    updateProgress(
+      0,
+      uniqueMatches.length,
+      `Checking ${uniqueMatches.length} unique taxonomy ${uniqueMatches.length === 1 ? "query" : "queries"}`,
+    );
+
+    await runQueue(
+      uniqueMatches,
+      GBIF_CONCURRENCY,
+      async (item) => {
+        try {
+          const { match, cached } = await fetchGbifMatchCached(item.row);
+          if (cached) cachedMatches += 1;
+          matchLookup.set(item.key, { match });
+        } catch (error) {
+          matchLookup.set(item.key, { error });
+        }
+      },
+      (done, total) => {
+        els.previewStatus.textContent = `${done}/${total} unique`;
+        const cacheText = cachedMatches ? `, ${cachedMatches} cached` : "";
+        updateProgress(done, total, `Checking unique taxonomy queries${cacheText}`);
+      },
+    );
+
+    state.results = rows.map((row, index) => {
+      const outcome = matchLookup.get(matchCacheKey(row));
+      if (!outcome || outcome.error) {
+        return formatUnmatchedResult(row, index + 1, outcome?.error?.message || "GBIF request failed");
+      }
+      const result = formatResult(row, outcome.match, index + 1);
+      if (mode === "both") result.localMatch = matchLocalReference(row);
+      return result;
+    });
+    renderResults();
+
+    await enrichResults(rows);
   }
 
   els.previewStatus.textContent = "Complete";
@@ -509,6 +642,74 @@ async function runMatching() {
   const hasOccurrenceResults = state.results.some((result) => (result.locationCheck?.records || []).length);
   els.downloadLocationButton.disabled = !hasLocationResults;
   els.downloadOccurrencesButton.disabled = !hasOccurrenceResults;
+}
+
+async function enrichResults(rows) {
+  const enrichmentTasks = [];
+  const alternativesByName = new Map();
+  const wikidataByUsageKey = new Map();
+  const locationByKey = new Map();
+
+  state.results.forEach((result, index) => {
+    if (result.matchType !== "EXACT" && result.inputName && !alternativesByName.has(result.inputName)) {
+      alternativesByName.set(result.inputName, result);
+      enrichmentTasks.push({ type: "alternatives", key: result.inputName, result });
+    }
+    if (els.wikidataCheck.checked && result.usageKey && !wikidataByUsageKey.has(result.usageKey)) {
+      wikidataByUsageKey.set(result.usageKey, result);
+      enrichmentTasks.push({ type: "wikidata", key: result.usageKey, result });
+    }
+    if (els.locationCheck.checked && result.usageKey) {
+      const location = locationForRow(rows[index]);
+      const key = locationCacheKey(result, location);
+      if (!locationByKey.has(key)) {
+        locationByKey.set(key, { result, location });
+        enrichmentTasks.push({ type: "location", key, result, location });
+      }
+    }
+  });
+
+  if (!enrichmentTasks.length) return;
+  const enrichmentResults = new Map();
+  updateProgress(0, enrichmentTasks.length, "Adding details");
+
+  await runQueue(
+    enrichmentTasks,
+    ENRICHMENT_CONCURRENCY,
+    async (task) => {
+      try {
+        if (task.type === "alternatives") {
+          enrichmentResults.set(`alternatives:${task.key}`, await fetchGbifAlternativesCached(task.result));
+        }
+        if (task.type === "wikidata") {
+          enrichmentResults.set(`wikidata:${task.key}`, await fetchWikidataLinksCached(task.key));
+        }
+        if (task.type === "location") {
+          enrichmentResults.set(`location:${task.key}`, await fetchLocationCheckCached(task.result, task.location));
+        }
+      } catch {
+        if (task.type === "alternatives") enrichmentResults.set(`alternatives:${task.key}`, []);
+        if (task.type === "wikidata") enrichmentResults.set(`wikidata:${task.key}`, { status: "Unavailable", links: [] });
+        if (task.type === "location") enrichmentResults.set(`location:${task.key}`, { status: "Unavailable", count: 0, records: [], location: task.location });
+      }
+    },
+    (done, total) => {
+      els.previewStatus.textContent = `${done}/${total} details`;
+      updateProgress(done, total, "Adding details");
+    },
+  );
+
+  state.results = state.results.map((result, index) => {
+    const location = locationForRow(rows[index]);
+    const locationKey = locationCacheKey(result, location);
+    return {
+      ...result,
+      alternatives: enrichmentResults.get(`alternatives:${result.inputName}`) || result.alternatives || [],
+      wikidata: result.usageKey ? enrichmentResults.get(`wikidata:${result.usageKey}`) || result.wikidata : result.wikidata,
+      locationCheck: result.usageKey ? enrichmentResults.get(`location:${locationKey}`) || result.locationCheck : result.locationCheck,
+    };
+  });
+  renderResults();
 }
 
 function baseResult(row, rowNumber) {

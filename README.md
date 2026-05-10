@@ -191,6 +191,8 @@ This is a plausibility check, not a definitive species distribution model. A “
 
 ## Use It From The Terminal
 
+TaxonLens is designed to avoid unnecessary API traffic on large files. If your table has 10,000 rows but only 700 unique taxonomy queries, it asks GBIF about those 700 unique queries and then fills the results back onto all 10,000 rows. The browser app also keeps a local cache, so repeated names are reused during later runs in the same browser.
+
 Run the demo checklist:
 
 ```bash
@@ -242,6 +244,18 @@ To slow down API calls:
 
 ```bash
 python3 cli/taxonlens.py my_taxonomy.csv --sleep 0.1 --out matched.csv
+```
+
+To adjust parallel API lookups:
+
+```bash
+python3 cli/taxonlens.py my_taxonomy.csv --concurrency 6 --out matched.csv
+```
+
+For very large tables, start with a preview:
+
+```bash
+python3 cli/taxonlens.py my_taxonomy.csv --limit 100 --out preview.csv
 ```
 
 ## Input Files

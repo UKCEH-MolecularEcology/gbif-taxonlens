@@ -12,6 +12,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 
@@ -144,6 +145,10 @@ def build_params(row: dict[str, str], mapping: dict[str, str], default_kingdom: 
     return urllib.parse.urlencode(params)
 
 
+def match_key(row: dict[str, str], mapping: dict[str, str], default_kingdom: str) -> str:
+    return build_params(row, mapping, default_kingdom)
+
+
 def unmatched_row(row: dict[str, str], mapping: dict[str, str], row_number: int, note: str) -> dict[str, str]:
     return {
         "inputRow": row_number,
@@ -175,14 +180,18 @@ def unmatched_row(row: dict[str, str], mapping: dict[str, str], row_number: int,
     }
 
 
-def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str, row_number: int) -> dict[str, str]:
-    params = build_params(row, mapping, default_kingdom)
+def fetch_gbif_match(params: str) -> dict[str, str]:
     url = f"https://api.gbif.org/v1/species/match?{params}"
-    try:
-        with urllib.request.urlopen(url, timeout=30) as response:
-            match = json.loads(response.read().decode("utf-8"))
-    except Exception as exc:
-        return unmatched_row(row, mapping, row_number, f"GBIF request failed: {exc}")
+    with urllib.request.urlopen(url, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def format_match_row(
+    row: dict[str, str],
+    mapping: dict[str, str],
+    row_number: int,
+    match: dict[str, str],
+) -> dict[str, str]:
     return {
         "inputRow": row_number,
         "inputName": scientific_name_for_row(row, mapping),
@@ -211,6 +220,15 @@ def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str
         "mostRecentNearbyGbifYear": "",
         "localReferenceMatch": "",
     }
+
+
+def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str, row_number: int) -> dict[str, str]:
+    params = build_params(row, mapping, default_kingdom)
+    try:
+        match = fetch_gbif_match(params)
+    except Exception as exc:
+        return unmatched_row(row, mapping, row_number, f"GBIF request failed: {exc}")
+    return format_match_row(row, mapping, row_number, match)
 
 
 def parse_float(value: str) -> float | None:
@@ -362,6 +380,14 @@ def fetch_location_check(
     return check, records[:50]
 
 
+def location_check_key(result: dict[str, str], row: dict[str, str], mapping: dict[str, str]) -> str:
+    location = location_for_row(row, mapping)
+    usage_key = result.get("usageKey") or result.get("acceptedUsageKey") or "none"
+    if not location:
+        return f"{usage_key}:no-coordinates"
+    return f"{usage_key}:{location['lat']:.5f},{location['lon']:.5f}"
+
+
 def apply_location_check(result: dict[str, str], check: dict[str, str]) -> None:
     counts = check.get("counts", {})
     result["locationStatus"] = check.get("status", "")
@@ -420,6 +446,7 @@ def main() -> int:
     parser.add_argument("--default-kingdom", default="", help="Fallback kingdom for all rows.")
     parser.add_argument("--limit", type=int, default=0, help="Limit rows for a test run.")
     parser.add_argument("--sleep", type=float, default=0.05, help="Delay between API calls.")
+    parser.add_argument("--concurrency", type=int, default=8, help="Number of parallel GBIF API requests.")
     args = parser.parse_args()
 
     headers, rows = load_rows(args.input)
@@ -435,17 +462,85 @@ def main() -> int:
         return 2
 
     rows_to_match = rows[: args.limit] if args.limit else rows
-    results = []
+    unique_matches = {}
+    for row in rows_to_match:
+        key = match_key(row, mapping, args.default_kingdom)
+        unique_matches.setdefault(key, row)
+
+    print(
+        f"Matching {len(rows_to_match)} input rows via {len(unique_matches)} unique GBIF taxonomy queries",
+        file=sys.stderr,
+    )
+    matches_by_key = {}
+    with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as executor:
+        futures = {
+            executor.submit(fetch_gbif_match, key): key
+            for key in unique_matches
+        }
+        for done, future in enumerate(as_completed(futures), start=1):
+            key = futures[future]
+            try:
+                matches_by_key[key] = {"match": future.result()}
+            except Exception as exc:
+                matches_by_key[key] = {"error": exc}
+            print(f"Taxonomy queries {done}/{len(unique_matches)}", file=sys.stderr)
+            if args.sleep:
+                time.sleep(args.sleep)
+
+    results = [
+        format_match_row(row, mapping, index, matches_by_key[match_key(row, mapping, args.default_kingdom)]["match"])
+        if "match" in matches_by_key.get(match_key(row, mapping, args.default_kingdom), {})
+        else unmatched_row(
+            row,
+            mapping,
+            index,
+            f"GBIF request failed: {matches_by_key.get(match_key(row, mapping, args.default_kingdom), {}).get('error', 'unknown error')}",
+        )
+        for index, row in enumerate(rows_to_match, start=1)
+    ]
+
     location_summaries = []
     occurrence_rows = []
-    for index, row in enumerate(rows_to_match, start=1):
+    if args.location_check:
+        unique_location_checks = {}
+        for result, row in zip(results, rows_to_match):
+            key = location_check_key(result, row, mapping)
+            unique_location_checks.setdefault(key, (result, row))
+
         print(
-            f"Matching {index}/{len(rows_to_match)}: {scientific_name_for_row(row, mapping)}",
+            f"Checking locations for {len(rows_to_match)} rows via {len(unique_location_checks)} unique occurrence queries",
             file=sys.stderr,
         )
-        result = match_row(row, mapping, args.default_kingdom, index)
-        if args.location_check:
-            check, records = fetch_location_check(result, row, mapping)
+        locations_by_key = {}
+        with ThreadPoolExecutor(max_workers=max(1, min(args.concurrency, 4))) as executor:
+            futures = {
+                executor.submit(fetch_location_check, result, row, mapping): key
+                for key, (result, row) in unique_location_checks.items()
+            }
+            for done, future in enumerate(as_completed(futures), start=1):
+                key = futures[future]
+                try:
+                    locations_by_key[key] = future.result()
+                except Exception:
+                    result, row = unique_location_checks[key]
+                    locations_by_key[key] = (
+                        {
+                            "status": "Unavailable",
+                            "count": 0,
+                            "qualityFilteredCount": 0,
+                            "location": location_for_row(row, mapping) or {},
+                            "counts": {1: 0, 5: 0, 10: 0, 50: 0},
+                            "nearestDistanceKm": "",
+                            "mostRecentYear": "",
+                        },
+                        [],
+                    )
+                print(f"Location queries {done}/{len(unique_location_checks)}", file=sys.stderr)
+                if args.sleep:
+                    time.sleep(args.sleep)
+
+        for result, row in zip(results, rows_to_match):
+            check, records = locations_by_key[location_check_key(result, row, mapping)]
             apply_location_check(result, check)
             location = check.get("location") or {}
             location_summaries.append(
@@ -477,8 +572,6 @@ def main() -> int:
                 }
                 for record in records
             )
-        results.append(result)
-        time.sleep(args.sleep)
 
     with args.out.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=OUTPUT_FIELDS)

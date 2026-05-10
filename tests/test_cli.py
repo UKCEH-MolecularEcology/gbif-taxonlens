@@ -85,6 +85,26 @@ class TaxonLensCliTests(unittest.TestCase):
 
         self.assertEqual(taxonlens.location_for_row(row, mapping), {"lat": 51.752, "lon": -1.2577})
 
+    def test_match_key_is_stable_for_duplicate_taxa(self):
+        mapping = {"scientificName": "scientificName", "kingdom": "kingdom"}
+        first = {"scientificName": "Quercus robur", "kingdom": "Plantae"}
+        second = {"scientificName": "Quercus robur", "kingdom": "Plantae"}
+
+        self.assertEqual(
+            taxonlens.match_key(first, mapping, ""),
+            taxonlens.match_key(second, mapping, ""),
+        )
+
+    def test_location_check_key_deduplicates_same_taxon_and_site(self):
+        result = {"usageKey": "2878688", "acceptedUsageKey": ""}
+        row = {"latitude": "51.752001", "longitude": "-1.257701"}
+        mapping = {"decimalLatitude": "latitude", "decimalLongitude": "longitude"}
+
+        self.assertEqual(
+            taxonlens.location_check_key(result, row, mapping),
+            "2878688:51.75200,-1.25770",
+        )
+
     def test_writes_expected_output_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "out.csv"
