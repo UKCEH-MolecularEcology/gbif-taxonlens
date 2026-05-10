@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GBIF TaxonLens</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="GBIF TaxonLens home">
+          <span class="brand-mark">TL</span>
+          <span>
+            <strong>GBIF TaxonLens</strong>
+            <small>Taxonomy matching and checklist QA</small>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Primary navigation">
+          <a href="#workspace">Workspace</a>
+          <a href="#schema">Schema</a>
+          <a href="#cli">CLI</a>
+        </nav>
+      </header>
+
+      <main id="top">
+        <section class="hero">
+          <div class="hero-copy">
+            <h1>Inspect taxonomy files against GBIF with confidence.</h1>
+            <p>
+              Upload a checklist, detect its taxonomy shape, match names against
+              the GBIF Backbone, and export a transparent review table for exact,
+              fuzzy, higher-rank, synonym, and unresolved matches.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="#workspace">Start matching</a>
+              <a class="button ghost" href="#cli">Use the terminal</a>
+            </div>
+          </div>
+          <div class="hero-panel" aria-label="Match summary preview">
+            <div class="panel-head">
+              <span>Run preview</span>
+              <strong id="previewStatus">Ready</strong>
+            </div>
+            <div class="metric-grid">
+              <div><strong id="metricRows">0</strong><span>Rows</span></div>
+              <div><strong id="metricMapped">0</strong><span>Mapped fields</span></div>
+              <div><strong id="metricIssues">0</strong><span>Health flags</span></div>
+            </div>
+            <div class="match-bars" aria-hidden="true">
+              <span class="bar exact"></span>
+              <span class="bar fuzzy"></span>
+              <span class="bar higher"></span>
+              <span class="bar none"></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace" id="workspace">
+          <div class="section-head">
+            <h2>Workspace</h2>
+            <p>Files stay in your browser. GBIF receives only the fields needed for matching.</p>
+          </div>
+
+          <div class="tool-grid">
+            <section class="upload-panel">
+              <label class="drop-zone" for="fileInput" id="dropZone">
+                <input id="fileInput" type="file" accept=".csv,.tsv,.txt" />
+                <span class="drop-icon">+</span>
+                <strong>Drop a CSV or TSV checklist</strong>
+                <small>Expected: scientific names, optional rank and higher taxonomy.</small>
+              </label>
+              <div class="controls">
+                <label>
+                  Default kingdom
+                  <select id="defaultKingdom">
+                    <option value="">Auto / not supplied</option>
+                    <option>Animalia</option>
+                    <option>Plantae</option>
+                    <option>Fungi</option>
+                    <option>Chromista</option>
+                    <option>Bacteria</option>
+                    <option>Archaea</option>
+                    <option>Protozoa</option>
+                    <option>Viruses</option>
+                  </select>
+                </label>
+                <label>
+                  Max rows
+                  <input id="maxRows" type="number" min="1" value="250" />
+                </label>
+              </div>
+              <button class="button primary full" id="runButton" disabled>Match with GBIF</button>
+              <button class="button secondary full" id="demoButton">Load demo file</button>
+            </section>
+
+            <section class="mapping-panel" id="schema">
+              <div class="panel-title">
+                <h3>Autodetected taxonomy</h3>
+                <span id="schemaBadge">No file</span>
+              </div>
+              <div id="mappingList" class="mapping-list">
+                <p class="empty">Upload a file to detect columns and taxonomy structure.</p>
+              </div>
+              <div class="health-list" id="healthList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="results-section">
+          <div class="section-head row">
+            <div>
+              <h2>Results</h2>
+              <p>Review uncertain matches before using the cleaned identifiers downstream.</p>
+            </div>
+            <div class="result-actions">
+              <button class="button secondary" id="downloadButton" disabled>Download CSV</button>
+              <button class="button ghost" id="clearButton" disabled>Clear</button>
+            </div>
+          </div>
+          <div class="filter-row" role="group" aria-label="Result filters">
+            <button class="chip active" data-filter="ALL">All</button>
+            <button class="chip" data-filter="EXACT">Exact</button>
+            <button class="chip" data-filter="FUZZY">Fuzzy</button>
+            <button class="chip" data-filter="HIGHERRANK">Higher rank</button>
+            <button class="chip" data-filter="NONE">None</button>
+          </div>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Input name</th>
+                  <th>Match</th>
+                  <th>Type</th>
+                  <th>Confidence</th>
+                  <th>Status</th>
+                  <th>Rank</th>
+                  <th>GBIF key</th>
+                </tr>
+              </thead>
+              <tbody id="resultsBody">
+                <tr>
+                  <td colspan="7" class="empty-cell">No matches yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="cli-section" id="cli">
+          <div>
+            <h2>Terminal workflow</h2>
+            <p>
+              The included Python script runs the same GBIF matching workflow for
+              reproducible batch jobs and pipelines.
+            </p>
+          </div>
+          <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
