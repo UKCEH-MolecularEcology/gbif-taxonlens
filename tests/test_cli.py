@@ -14,10 +14,12 @@ import taxonlens  # noqa: E402
 
 class TaxonLensCliTests(unittest.TestCase):
     def test_detects_common_scientific_name_alias(self):
-        headers = ["record_id", "species", "family_name"]
+        headers = ["record_id", "species", "family_name", "latitude", "longitude"]
 
         self.assertEqual(taxonlens.detect_column(headers, "scientificName"), "species")
         self.assertEqual(taxonlens.detect_column(headers, "family"), "family_name")
+        self.assertEqual(taxonlens.detect_column(headers, "decimalLatitude"), "latitude")
+        self.assertEqual(taxonlens.detect_column(headers, "decimalLongitude"), "longitude")
 
     def test_loads_tsv_input(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -76,6 +78,12 @@ class TaxonLensCliTests(unittest.TestCase):
         self.assertEqual(params["kingdom"], ["Plantae"])
         self.assertEqual(params["family"], ["Fagaceae"])
         self.assertEqual(params["genus"], ["Quercus"])
+
+    def test_reads_valid_location_from_detected_columns(self):
+        row = {"latitude": "51.7520", "longitude": "-1.2577"}
+        mapping = {"decimalLatitude": "latitude", "decimalLongitude": "longitude"}
+
+        self.assertEqual(taxonlens.location_for_row(row, mapping), {"lat": 51.752, "lon": -1.2577})
 
     def test_writes_expected_output_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:

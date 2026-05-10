@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import re
 import sys
 import time
@@ -31,6 +32,10 @@ ALIASES = {
     "order": ["order", "ordo"],
     "family": ["family", "family_name"],
     "genus": ["genus", "genericname", "generic_name"],
+    "specificEpithet": ["specificepithet", "specific_epithet", "epithet"],
+    "decimalLatitude": ["decimallatitude", "decimal_latitude", "latitude", "lat"],
+    "decimalLongitude": ["decimallongitude", "decimal_longitude", "longitude", "lon", "lng", "long"],
+    "country": ["country", "countrycode", "country_code"],
 }
 
 OUTPUT_FIELDS = [
@@ -208,10 +213,209 @@ def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str
     }
 
 
+def parse_float(value: str) -> float | None:
+    try:
+        parsed = float(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def location_for_row(row: dict[str, str], mapping: dict[str, str]) -> dict[str, float] | None:
+    lat = parse_float(mapped_value(row, mapping, "decimalLatitude"))
+    lon = parse_float(mapped_value(row, mapping, "decimalLongitude"))
+    if lat is None or lon is None or lat < -90 or lat > 90 or lon < -180 or lon > 180:
+        return None
+    return {"lat": lat, "lon": lon}
+
+
+def location_polygon(location: dict[str, float], radius_km: float = 50) -> str:
+    lat = location["lat"]
+    lon = location["lon"]
+    lat_delta = radius_km / 111.32
+    lon_scale = 111.32 * math.cos(math.radians(lat))
+    lon_delta = radius_km / lon_scale if abs(lon_scale) > 0.0001 else radius_km / 111.32
+    west = lon - lon_delta
+    east = lon + lon_delta
+    south = lat - lat_delta
+    north = lat + lat_delta
+    return f"POLYGON(({west} {south}, {east} {south}, {east} {north}, {west} {north}, {west} {south}))"
+
+
+def distance_km(a: dict[str, float], b: dict[str, float]) -> float:
+    radius = 6371.0
+    d_lat = math.radians(b["lat"] - a["lat"])
+    d_lon = math.radians(b["lon"] - a["lon"])
+    lat1 = math.radians(a["lat"])
+    lat2 = math.radians(b["lat"])
+    h = math.sin(d_lat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(d_lon / 2) ** 2
+    return 2 * radius * math.asin(math.sqrt(h))
+
+
+def plausibility_from_counts(counts: dict[int, int], nearest_distance_km: float, total_records: int) -> str:
+    if not total_records:
+        return "Data deficient"
+    if counts[10] >= 3 or counts[5] >= 1:
+        return "High plausibility"
+    if counts[50] >= 3 or nearest_distance_km <= 50:
+        return "Moderate plausibility"
+    if total_records > 0:
+        return "Low plausibility"
+    return "No GBIF support"
+
+
+def fetch_location_check(
+    result: dict[str, str],
+    row: dict[str, str],
+    mapping: dict[str, str],
+) -> tuple[dict[str, str], list[dict[str, str]]]:
+    location = location_for_row(row, mapping)
+    if not location:
+        return {
+            "status": "No coordinates",
+            "count": 0,
+            "qualityFilteredCount": 0,
+            "location": {},
+            "counts": {1: 0, 5: 0, 10: 0, 50: 0},
+            "nearestDistanceKm": "",
+            "mostRecentYear": "",
+        }, []
+
+    usage_key = result.get("usageKey") or result.get("acceptedUsageKey")
+    if not usage_key:
+        return {
+            "status": "No taxon key",
+            "count": 0,
+            "qualityFilteredCount": 0,
+            "location": location,
+            "counts": {1: 0, 5: 0, 10: 0, 50: 0},
+            "nearestDistanceKm": "",
+            "mostRecentYear": "",
+        }, []
+
+    params = urllib.parse.urlencode(
+        {
+            "taxon_key": usage_key,
+            "geometry": location_polygon(location),
+            "has_coordinate": "true",
+            "has_geospatial_issue": "false",
+            "occurrence_status": "PRESENT",
+            "limit": "300",
+        }
+    )
+    url = f"https://api.gbif.org/v1/occurrence/search?{params}"
+    try:
+        with urllib.request.urlopen(url, timeout=30) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return {
+            "status": "Unavailable",
+            "count": 0,
+            "qualityFilteredCount": 0,
+            "location": location,
+            "counts": {1: 0, 5: 0, 10: 0, 50: 0},
+            "nearestDistanceKm": "",
+            "mostRecentYear": "",
+        }, []
+
+    records = []
+    for item in data.get("results", []):
+        lat = parse_float(item.get("decimalLatitude"))
+        lon = parse_float(item.get("decimalLongitude"))
+        uncertainty = parse_float(item.get("coordinateUncertaintyInMeters"))
+        if lat is None or lon is None:
+            continue
+        if uncertainty is not None and uncertainty > 10000:
+            continue
+        if item.get("basisOfRecord") in {"FOSSIL_SPECIMEN", "LIVING_SPECIMEN"}:
+            continue
+        distance = distance_km(location, {"lat": lat, "lon": lon})
+        records.append(
+            {
+                "occurrenceKey": item.get("key", ""),
+                "occurrenceName": item.get("scientificName", ""),
+                "distanceKm": round(distance, 3),
+                "decimalLatitude": lat,
+                "decimalLongitude": lon,
+                "country": item.get("country", ""),
+                "year": item.get("year", ""),
+                "basisOfRecord": item.get("basisOfRecord", ""),
+                "coordinateUncertaintyMeters": item.get("coordinateUncertaintyInMeters", ""),
+            }
+        )
+
+    records.sort(key=lambda item: item["distanceKm"])
+    radii = [1, 5, 10, 50]
+    counts = {radius: sum(1 for record in records if record["distanceKm"] <= radius) for radius in radii}
+    years = [int(record["year"]) for record in records if str(record["year"]).isdigit()]
+    nearest_distance = records[0]["distanceKm"] if records else math.inf
+    status = plausibility_from_counts(counts, nearest_distance, int(data.get("count") or len(records)))
+    check = {
+        "status": status,
+        "count": int(data.get("count") or 0),
+        "qualityFilteredCount": len(records),
+        "location": location,
+        "counts": counts,
+        "nearestDistanceKm": round(nearest_distance, 2) if records else "",
+        "mostRecentYear": max(years) if years else "",
+    }
+    return check, records[:50]
+
+
+def apply_location_check(result: dict[str, str], check: dict[str, str]) -> None:
+    counts = check.get("counts", {})
+    result["locationStatus"] = check.get("status", "")
+    result["nearbyGbifOccurrenceCount"] = check.get("count", "")
+    result["recordsWithin1Km"] = counts.get(1, "")
+    result["recordsWithin5Km"] = counts.get(5, "")
+    result["recordsWithin10Km"] = counts.get(10, "")
+    result["recordsWithin50Km"] = counts.get(50, "")
+    result["nearestGbifRecordKm"] = check.get("nearestDistanceKm", "")
+    result["mostRecentNearbyGbifYear"] = check.get("mostRecentYear", "")
+
+
+LOCATION_SUMMARY_FIELDS = [
+    "inputRow",
+    "inputName",
+    "matchedName",
+    "usageKey",
+    "locationStatus",
+    "inputLatitude",
+    "inputLongitude",
+    "nearbyGbifOccurrenceCount",
+    "qualityFilteredOccurrenceCount",
+    "recordsWithin1Km",
+    "recordsWithin5Km",
+    "recordsWithin10Km",
+    "recordsWithin50Km",
+    "nearestGbifRecordKm",
+    "mostRecentNearbyGbifYear",
+]
+
+OCCURRENCE_FIELDS = [
+    "inputRow",
+    "inputName",
+    "matchedName",
+    "usageKey",
+    "occurrenceKey",
+    "occurrenceName",
+    "distanceKm",
+    "decimalLatitude",
+    "decimalLongitude",
+    "country",
+    "year",
+    "basisOfRecord",
+    "coordinateUncertaintyMeters",
+]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Match taxonomy files against the GBIF Backbone.")
     parser.add_argument("input", type=Path, help="Input CSV or TSV file")
     parser.add_argument("--out", type=Path, default=Path("gbif-taxonlens-results.csv"))
+    parser.add_argument("--location-check", action="store_true", help="Check matched taxa against nearby GBIF occurrences.")
+    parser.add_argument("--location-summary-out", type=Path, default=Path("gbif-taxonlens-location-summary.csv"))
+    parser.add_argument("--occurrences-out", type=Path, default=Path("gbif-taxonlens-location-occurrences.csv"))
     parser.add_argument("--name-column", help="Scientific name column. Autodetected by default.")
     parser.add_argument("--default-kingdom", default="", help="Fallback kingdom for all rows.")
     parser.add_argument("--limit", type=int, default=0, help="Limit rows for a test run.")
@@ -232,12 +436,48 @@ def main() -> int:
 
     rows_to_match = rows[: args.limit] if args.limit else rows
     results = []
+    location_summaries = []
+    occurrence_rows = []
     for index, row in enumerate(rows_to_match, start=1):
         print(
             f"Matching {index}/{len(rows_to_match)}: {scientific_name_for_row(row, mapping)}",
             file=sys.stderr,
         )
-        results.append(match_row(row, mapping, args.default_kingdom, index))
+        result = match_row(row, mapping, args.default_kingdom, index)
+        if args.location_check:
+            check, records = fetch_location_check(result, row, mapping)
+            apply_location_check(result, check)
+            location = check.get("location") or {}
+            location_summaries.append(
+                {
+                    "inputRow": result["inputRow"],
+                    "inputName": result["inputName"],
+                    "matchedName": result["matchedName"],
+                    "usageKey": result["usageKey"],
+                    "locationStatus": check.get("status", ""),
+                    "inputLatitude": location.get("lat", ""),
+                    "inputLongitude": location.get("lon", ""),
+                    "nearbyGbifOccurrenceCount": check.get("count", ""),
+                    "qualityFilteredOccurrenceCount": check.get("qualityFilteredCount", ""),
+                    "recordsWithin1Km": check.get("counts", {}).get(1, ""),
+                    "recordsWithin5Km": check.get("counts", {}).get(5, ""),
+                    "recordsWithin10Km": check.get("counts", {}).get(10, ""),
+                    "recordsWithin50Km": check.get("counts", {}).get(50, ""),
+                    "nearestGbifRecordKm": check.get("nearestDistanceKm", ""),
+                    "mostRecentNearbyGbifYear": check.get("mostRecentYear", ""),
+                }
+            )
+            occurrence_rows.extend(
+                {
+                    "inputRow": result["inputRow"],
+                    "inputName": result["inputName"],
+                    "matchedName": result["matchedName"],
+                    "usageKey": result["usageKey"],
+                    **record,
+                }
+                for record in records
+            )
+        results.append(result)
         time.sleep(args.sleep)
 
     with args.out.open("w", newline="", encoding="utf-8") as handle:
@@ -246,6 +486,17 @@ def main() -> int:
         writer.writerows(results)
 
     print(f"Wrote {len(results)} rows to {args.out}")
+    if args.location_check:
+        with args.location_summary_out.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=LOCATION_SUMMARY_FIELDS)
+            writer.writeheader()
+            writer.writerows(location_summaries)
+        with args.occurrences_out.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=OCCURRENCE_FIELDS)
+            writer.writeheader()
+            writer.writerows(occurrence_rows)
+        print(f"Wrote {len(location_summaries)} rows to {args.location_summary_out}")
+        print(f"Wrote {len(occurrence_rows)} rows to {args.occurrences_out}")
     return 0
 
 

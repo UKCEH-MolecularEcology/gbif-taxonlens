@@ -768,12 +768,14 @@ async function fetchWikidataLinks(gbifId) {
 }
 
 function renderResults() {
+  syncLocationColumnHeaders();
   const rows = state.results.filter(
     (result) => state.filter === "ALL" || result.matchType === state.filter,
   );
 
   if (!rows.length) {
-    els.resultsBody.innerHTML = '<tr><td colspan="11" class="empty-cell">No matches yet.</td></tr>';
+    const colspan = els.showLocationColumns.checked ? 17 : 11;
+    els.resultsBody.innerHTML = `<tr><td colspan="${colspan}" class="empty-cell">No matches yet.</td></tr>`;
     return;
   }
 
@@ -803,6 +805,12 @@ function renderResults() {
       const result = state.results.find((item) => item.inputName === button.dataset.name);
       if (result) openReviewDrawer(result);
     });
+  });
+}
+
+function syncLocationColumnHeaders() {
+  document.querySelectorAll("th.location-extra").forEach((header) => {
+    header.hidden = !els.showLocationColumns.checked;
   });
 }
 

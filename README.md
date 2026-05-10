@@ -200,10 +200,19 @@ python3 cli/taxonlens.py examples/demo-checklist.csv --default-kingdom Plantae -
 Run the location-check demo file:
 
 ```bash
-python3 cli/taxonlens.py examples/location-check-demo.csv --default-kingdom Plantae --out location-demo-matched.csv
+python3 cli/taxonlens.py examples/location-check-demo.csv \
+  --default-kingdom Plantae \
+  --location-check \
+  --out location-demo-matched.csv \
+  --location-summary-out location-summary.csv \
+  --occurrences-out nearby-occurrences.csv
 ```
 
-The browser app can use the same file with **Location plausibility check** enabled.
+This creates three files:
+
+- `location-demo-matched.csv`: one row per input record, including taxonomy and location-summary columns
+- `location-summary.csv`: one row per input record, focused on the location plausibility result
+- `nearby-occurrences.csv`: one row per nearby GBIF occurrence record used by the location check
 
 Run a DADA2-style taxonomy table:
 
