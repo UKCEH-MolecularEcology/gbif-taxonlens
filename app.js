@@ -418,7 +418,7 @@ function updateProgress(done, total, label = "Matching") {
   const percent = total ? Math.round((done / total) * 100) : 0;
   els.progressWrap.hidden = false;
   els.progressLabel.textContent = label;
-  els.progressCount.textContent = `${percent}%`;
+  els.progressCount.textContent = `${done}/${total} · ${percent}%`;
   els.progressBar.style.width = `${percent}%`;
 }
 
