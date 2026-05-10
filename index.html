@@ -10,7 +10,11 @@
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="#top" aria-label="GBIF TaxonLens home">
-          <span class="brand-mark">TL</span>
+          <img
+            class="brand-logo"
+            src="assets/ukceh/ukceh-logo-black.png"
+            alt="UKCEH"
+          />
           <span>
             <strong>GBIF TaxonLens</strong>
             <small>Taxonomy matching and checklist QA</small>
@@ -26,6 +30,11 @@
       <main id="top">
         <section class="hero">
           <div class="hero-copy">
+            <img
+              class="hero-logo"
+              src="assets/ukceh/ukceh-logo-tagline-black.png"
+              alt="UKCEH. Our planet. Decoded."
+            />
             <h1>Inspect taxonomy files against GBIF with confidence.</h1>
             <p>
               Upload a checklist, detect its taxonomy shape, match names against
@@ -38,6 +47,11 @@
             </div>
           </div>
           <div class="hero-panel" aria-label="Match summary preview">
+            <img
+              class="panel-logo"
+              src="assets/ukceh/ukceh-logo-tagline-white-data.png"
+              alt="UKCEH Data"
+            />
             <div class="panel-head">
               <span>Run preview</span>
               <strong id="previewStatus">Ready</strong>
@@ -158,6 +172,13 @@
           <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
         </section>
       </main>
+      <footer class="site-footer">
+        <img
+          src="assets/ukceh/ukceh-logo-white.png"
+          alt="UKCEH"
+        />
+        <span>GBIF TaxonLens is a UKCEH-styled prototype for transparent taxonomy matching.</span>
+      </footer>
     </div>
 
     <script src="app.js"></script>
