@@ -119,13 +119,6 @@ a {
   padding: 44px 0 72px;
 }
 
-.hero-logo {
-  width: min(440px, 100%);
-  height: auto;
-  display: block;
-  margin-bottom: 34px;
-}
-
 .hero h1 {
   max-width: 780px;
   margin: 0;
@@ -210,13 +203,6 @@ a {
   background: var(--black);
   color: white;
   padding: 24px;
-}
-
-.panel-logo {
-  width: min(300px, 100%);
-  height: auto;
-  display: block;
-  margin: 0 0 24px auto;
 }
 
 .panel-head,
