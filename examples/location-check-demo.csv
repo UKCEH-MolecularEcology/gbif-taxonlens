@@ -1,0 +1,5 @@
+id,scientificName,kingdom,family,taxonRank,decimalLatitude,decimalLongitude,site
+1,Quercus robur,Plantae,Fagaceae,SPECIES,51.7520,-1.2577,Oxford
+2,Ammophila arenaria,Plantae,Poaceae,SPECIES,50.7192,-1.8808,Bournemouth coast
+3,Carex binervis,Plantae,Cyperaceae,SPECIES,54.5973,-5.9301,Belfast
+4,Rosa canina,Plantae,Rosaceae,SPECIES,52.2053,0.1218,Cambridge

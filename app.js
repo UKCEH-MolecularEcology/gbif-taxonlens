@@ -66,12 +66,12 @@ const aliases = {
   country: ["country", "countrycode", "country_code"],
 };
 
-const demoCsv = `id,scientificName,kingdom,family,taxonRank
-1,Ficus variegata,Plantae,Moraceae,SPECIES
-2,Rosa inodora,Plantae,Rosaceae,SPECIES
-3,Ammophila arenaria,Plantae,Poaceae,SPECIES
-4,Carex binervis,Plantae,Cyperaceae,SPECIES
-5,Quercus robur,Plantae,Fagaceae,SPECIES`;
+const demoCsv = `id,scientificName,kingdom,family,taxonRank,decimalLatitude,decimalLongitude
+1,Ficus variegata,Plantae,Moraceae,SPECIES,51.5074,-0.1278
+2,Rosa inodora,Plantae,Rosaceae,SPECIES,52.2053,0.1218
+3,Ammophila arenaria,Plantae,Poaceae,SPECIES,50.7192,-1.8808
+4,Carex binervis,Plantae,Cyperaceae,SPECIES,54.5973,-5.9301
+5,Quercus robur,Plantae,Fagaceae,SPECIES,51.7520,-1.2577`;
 
 const els = {
   fileInput: document.querySelector("#fileInput"),

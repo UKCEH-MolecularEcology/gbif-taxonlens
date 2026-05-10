@@ -190,6 +190,14 @@ Run the demo checklist:
 python3 cli/taxonlens.py examples/demo-checklist.csv --default-kingdom Plantae --out matched.csv
 ```
 
+Run the location-check demo file:
+
+```bash
+python3 cli/taxonlens.py examples/location-check-demo.csv --default-kingdom Plantae --out location-demo-matched.csv
+```
+
+The browser app can use the same file with **Location plausibility check** enabled.
+
 Run a DADA2-style taxonomy table:
 
 ```bash
@@ -396,6 +404,7 @@ The `.nojekyll` file is included so GitHub Pages serves the static files directl
 │   └── taxonlens.py            # Command-line matcher
 ├── examples/
 │   ├── demo-checklist.csv
+│   ├── location-check-demo.csv
 │   └── dada2-taxonomy.csv
 ├── tests/
 │   └── test_cli.py
