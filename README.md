@@ -142,6 +142,8 @@ For each matched GBIF ID, TaxonLens queries Wikidata for linked identifiers:
 
 This is a useful audit step when you want to link GBIF-based names to sequence databases or check whether community identifiers agree. Wikidata results should still be reviewed, especially for homonyms and synonyms.
 
+When enabled, the results table shows a visible Wikidata status column and any linked NCBI taxonomy IDs. The same values are included in downloaded CSV exports.
+
 ## Use It From The Terminal
 
 Run the demo checklist:

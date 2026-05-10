@@ -681,7 +681,7 @@ input {
 
 table {
   width: 100%;
-  min-width: 860px;
+  min-width: 1080px;
   border-collapse: collapse;
 }
 
@@ -710,6 +710,26 @@ th {
   color: white;
   font-size: 12px;
   font-weight: 800;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.status-pill.linked {
+  background: var(--data);
+  color: var(--black);
+}
+
+.status-pill.muted {
+  background: var(--panel-strong);
+  color: var(--muted);
 }
 
 .cli-section {

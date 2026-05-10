@@ -637,7 +637,7 @@ function renderResults() {
   );
 
   if (!rows.length) {
-    els.resultsBody.innerHTML = '<tr><td colspan="8" class="empty-cell">No matches yet.</td></tr>';
+    els.resultsBody.innerHTML = '<tr><td colspan="10" class="empty-cell">No matches yet.</td></tr>';
     return;
   }
 
@@ -652,6 +652,8 @@ function renderResults() {
           <td>${escapeHtml(row.status)}</td>
           <td>${escapeHtml(row.rank)}</td>
           <td>${escapeHtml(row.usageKey)}</td>
+          <td>${wikidataBadge(row)}</td>
+          <td>${escapeHtml(ncbiIds(row) || "-")}</td>
           <td><button class="button secondary mini review-button" data-name="${escapeHtml(row.inputName)}">Details</button></td>
         </tr>
       `,
@@ -664,6 +666,17 @@ function renderResults() {
       if (result) openReviewDrawer(result);
     });
   });
+}
+
+function ncbiIds(row) {
+  return (row.wikidata?.links || []).map((item) => item.ncbi).filter(Boolean).join(", ");
+}
+
+function wikidataBadge(row) {
+  if (!els.wikidataCheck.checked && !row.wikidata) return '<span class="status-pill muted">Not checked</span>';
+  const status = row.wikidata?.status || "Not checked";
+  const linked = status === "Linked";
+  return `<span class="status-pill ${linked ? "linked" : "muted"}">${escapeHtml(status)}</span>`;
 }
 
 function openReviewDrawer(result) {
