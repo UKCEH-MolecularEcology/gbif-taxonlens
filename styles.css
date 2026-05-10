@@ -205,6 +205,14 @@ a {
   padding: 24px;
 }
 
+.preview-brand {
+  margin-bottom: 28px;
+  color: white;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
 .panel-head,
 .panel-title,
 .section-head.row {
