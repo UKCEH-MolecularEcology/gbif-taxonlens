@@ -144,6 +144,16 @@ function detectMapping(headers, rows) {
 }
 
 function detectSchema(mapping) {
+  if (
+    mapping.kingdom &&
+    mapping.phylum &&
+    mapping.class &&
+    mapping.order &&
+    mapping.family &&
+    mapping.genus
+  ) {
+    return "DADA2-style taxonomy table";
+  }
   if (mapping.parentNameUsageID && mapping.taxonID) return "Taxonomy tree";
   if (mapping.acceptedNameUsageID || mapping.taxonomicStatus) return "Darwin Core checklist";
   if (mapping.taxonID && mapping.scientificName) return "Identifier-linked checklist";
@@ -179,6 +189,36 @@ function healthCheck(rows, mapping) {
   }
 
   return health;
+}
+
+function cleanTaxonValue(value) {
+  return String(value || "")
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^[a-zA-Z]__/, "")
+    .replace(/^uncultured\s+/i, "")
+    .replace(/^unclassified\s+/i, "")
+    .replace(/^unknown\s*/i, "")
+    .trim();
+}
+
+function isBinomial(value) {
+  return /^[A-Z][A-Za-z-]+(\s+[a-z][A-Za-z-]+){1,2}$/.test(value);
+}
+
+function getMappedValue(row, field) {
+  return cleanTaxonValue(row[state.mapping[field]?.column]);
+}
+
+function scientificNameForRow(row) {
+  const supplied = getMappedValue(row, "scientificName");
+  const genus = getMappedValue(row, "genus");
+  const specific = getMappedValue(row, "specificEpithet");
+
+  if (supplied && isBinomial(supplied)) return supplied;
+  if (genus && supplied && /^[a-z][A-Za-z-]+$/.test(supplied)) return `${genus} ${supplied}`;
+  if (genus && specific) return `${genus} ${specific}`;
+  return supplied || genus;
 }
 
 function renderMapping() {
@@ -283,9 +323,9 @@ function loadText(text) {
 }
 
 function buildMatchParams(row) {
-  const get = (field) => row[state.mapping[field]?.column] || "";
+  const get = (field) => getMappedValue(row, field);
   const params = new URLSearchParams({
-    name: get("scientificName"),
+    name: scientificNameForRow(row),
     verbose: "true",
     strict: "false",
   });
@@ -324,7 +364,7 @@ async function runMatching() {
 }
 
 function formatResult(row, match) {
-  const inputName = row[state.mapping.scientificName.column] || "";
+  const inputName = scientificNameForRow(row);
   return {
     inputName,
     matchedName: match.scientificName || "",

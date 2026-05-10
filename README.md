@@ -1,36 +1,37 @@
 # GBIF TaxonLens
 
-GBIF TaxonLens is a UKCEH-styled, static-first tool for checking user-supplied taxonomy and checklist files against the GBIF Backbone. It is designed for researchers who need a transparent review table rather than a black-box name lookup.
+GBIF TaxonLens helps you check taxonomy names against the GBIF Backbone Taxonomy.
 
-The web portal runs entirely in the browser. Uploaded files are parsed locally; only the name and classification fields needed for matching are sent to the GBIF Species Match API.
+It is designed for people working with biodiversity, metabarcoding, amplicon, checklist, or species-list data who want a quick way to ask:
 
-## Features
+- Which names match GBIF exactly?
+- Which names only match fuzzily?
+- Which names match only to a higher rank?
+- Which names need manual review?
+- Which GBIF taxon IDs should I carry into downstream analyses?
 
-- Browser-based CSV/TSV upload.
-- Autodetection of user-provided taxonomy columns.
-- Support for simple name lists, classified checklists, Darwin Core-style checklists, and taxonomy-tree-like files.
-- Checklist health checks for duplicate names, weak higher taxonomy, missing authorship, and orphaned parent IDs.
-- GBIF `/species/match` lookup with `verbose=true`.
-- Result filtering by `EXACT`, `FUZZY`, `HIGHERRANK`, and `NONE`.
-- CSV export of matched names and GBIF identifiers.
-- Python command-line workflow for reproducible batch use.
-- GitHub Actions unit tests.
+You can use it in two ways:
 
-## Brand Palette
+- **Web app:** upload a CSV/TSV file in your browser.
+- **Command line:** run the same matching workflow from a terminal.
 
-The interface uses the UKCEH core palette from the colour guidelines:
+The web app is static. There is no database and no user account. Your uploaded file is parsed in your browser; only the relevant name and classification fields are sent to the public GBIF API for matching.
 
-| Token | Hex |
-| --- | --- |
-| Black | `#000000` |
-| White | `#FFFFFF` |
-| Land | `#90A968` |
-| Air | `#D6EAE6` |
-| Earth | `#D7B7AA` |
-| Water | `#477AE2` |
-| Data | `#DBFE52` |
+## What It Does
 
-## Quick Start: Web Portal
+GBIF TaxonLens reads a taxonomy file, tries to detect useful columns, and sends each name to the GBIF Species Match API. It then returns a review table with:
+
+- the input name
+- the matched GBIF name
+- the GBIF usage key
+- match type, such as `EXACT`, `FUZZY`, `HIGHERRANK`, or `NONE`
+- confidence score
+- taxonomic status and rank
+- accepted GBIF name where available
+
+The goal is not to replace taxonomic judgement. The goal is to make the easy cases quick and the uncertain cases obvious.
+
+## Try It In A Browser
 
 Clone the repository:
 
@@ -39,13 +40,13 @@ git clone https://github.com/UKCEH-MolecularEcology/gbif-taxonlens.git
 cd gbif-taxonlens
 ```
 
-Open the static portal directly:
+Open the app:
 
 ```bash
 open index.html
 ```
 
-Alternatively, serve it locally:
+If your browser blocks local file behaviour, run a tiny local server instead:
 
 ```bash
 python3 -m http.server 8080
@@ -57,69 +58,119 @@ Then open:
 http://localhost:8080
 ```
 
-## Quick Start: Command Line
+You can also publish the repository with GitHub Pages because the app is just static HTML, CSS, and JavaScript.
 
-Run the included demo file:
+## Use It From The Terminal
+
+Run the demo checklist:
 
 ```bash
 python3 cli/taxonlens.py examples/demo-checklist.csv --default-kingdom Plantae --out matched.csv
 ```
 
+Run a DADA2-style taxonomy table:
+
+```bash
+python3 cli/taxonlens.py examples/dada2-taxonomy.csv --out dada2-matched.csv
+```
+
 Run your own file:
 
 ```bash
-python3 cli/taxonlens.py input.csv --out matched.csv
+python3 cli/taxonlens.py my_taxonomy.csv --out matched.csv
 ```
 
-Specify a non-standard scientific-name column:
+If your scientific-name column has an unusual name, tell TaxonLens which column to use:
 
 ```bash
-python3 cli/taxonlens.py input.csv --name-column species --out matched.csv
+python3 cli/taxonlens.py my_taxonomy.csv --name-column taxon --out matched.csv
 ```
 
-Limit rows for a test run:
+For a quick test on the first 100 rows:
 
 ```bash
-python3 cli/taxonlens.py input.csv --limit 100 --out matched-preview.csv
+python3 cli/taxonlens.py my_taxonomy.csv --limit 100 --out preview.csv
 ```
 
-Slow requests for gentle API use:
+To slow down API calls:
 
 ```bash
-python3 cli/taxonlens.py input.csv --sleep 0.1 --out matched.csv
+python3 cli/taxonlens.py my_taxonomy.csv --sleep 0.1 --out matched.csv
 ```
 
-## Input File Format
+## Input Files
 
-CSV and TSV files are supported. The only required field is a scientific-name column, but matching is safer when higher taxonomy is supplied.
+TaxonLens accepts CSV and TSV files.
 
-Recommended columns:
+The simplest file has one name column:
 
-| Purpose | Common column names |
-| --- | --- |
-| Scientific name | `scientificName`, `scientific_name`, `species`, `taxon_name`, `name` |
-| Taxon rank | `taxonRank`, `taxon_rank`, `rank` |
-| Kingdom | `kingdom` |
-| Family | `family`, `family_name` |
-| Genus | `genus`, `genericName` |
-| Authorship | `scientificNameAuthorship`, `authorship`, `author` |
-| Taxon ID | `taxonID`, `taxon_id`, `gbifID`, `usageKey` |
-| Parent ID | `parentNameUsageID`, `parent_taxon_id`, `parent_id` |
-| Accepted name ID | `acceptedNameUsageID`, `accepted_taxon_id` |
-| Taxonomic status | `taxonomicStatus`, `taxonomic_status`, `status` |
+```csv
+scientificName
+Quercus robur
+Rosa canina
+Saccharomyces cerevisiae
+```
 
-Example:
+Matching is better if you also provide higher taxonomy:
 
 ```csv
 id,scientificName,kingdom,family,taxonRank
-1,Ficus variegata,Plantae,Moraceae,SPECIES
-2,Rosa inodora,Plantae,Rosaceae,SPECIES
-3,Ammophila arenaria,Plantae,Poaceae,SPECIES
+1,Quercus robur,Plantae,Fagaceae,SPECIES
+2,Rosa canina,Plantae,Rosaceae,SPECIES
+3,Saccharomyces cerevisiae,Fungi,Saccharomycetaceae,SPECIES
 ```
+
+TaxonLens recognises common column names including:
+
+| Meaning | Example column names |
+| --- | --- |
+| Scientific name | `scientificName`, `scientific_name`, `taxon_name`, `name`, `species` |
+| Rank | `taxonRank`, `rank` |
+| Kingdom | `kingdom`, `Kingdom` |
+| Phylum | `phylum`, `Phylum`, `division` |
+| Class | `class`, `Class` |
+| Order | `order`, `Order` |
+| Family | `family`, `Family` |
+| Genus | `genus`, `Genus` |
+| Species epithet or species name | `species`, `Species` |
+| Authorship | `scientificNameAuthorship`, `authorship`, `author` |
+| Existing taxon ID | `taxonID`, `gbifID`, `usageKey` |
+
+## DADA2 And ASV Taxonomy Tables
+
+TaxonLens can read common DADA2 taxonomy outputs, including tables produced from `assignTaxonomy()` and similar ASV taxonomy workflows.
+
+A typical DADA2 taxonomy table looks like this:
+
+```csv
+ASV,Kingdom,Phylum,Class,Order,Family,Genus,Species
+ASV1,k__Plantae,p__Streptophyta,c__Magnoliopsida,o__Fagales,f__Fagaceae,g__Quercus,s__robur
+ASV2,k__Fungi,p__Ascomycota,c__Saccharomycetes,o__Saccharomycetales,f__Saccharomycetaceae,g__Saccharomyces,s__cerevisiae
+```
+
+TaxonLens will:
+
+- detect the rank columns
+- remove prefixes such as `k__`, `p__`, `g__`, and `s__`
+- combine `Genus` and an epithet-style `Species` value into a binomial name, for example `Quercus robur`
+- pass higher taxonomy such as kingdom, family, and genus to GBIF to improve matching
+
+If your DADA2 `Species` column already contains full names such as `Quercus robur`, TaxonLens will use the full name directly.
+
+### Important Note For Amplicon Data
+
+GBIF is a biodiversity taxonomy and occurrence-data infrastructure. It is not a sequence classifier. DADA2 outputs may contain:
+
+- database-specific labels
+- unresolved genus-only assignments
+- environmental or uncultured labels
+- species hypotheses that need manual checking
+
+Treat TaxonLens results as a GBIF name-matching review table, not as proof that an ASV has been identified to species.
 
 ## Output Columns
 
-The CLI and web export include:
+Exports include:
 
 ```text
 inputName
@@ -137,11 +188,32 @@ family
 note
 ```
 
-`matchType` follows GBIF terminology, including `EXACT`, `FUZZY`, `HIGHERRANK`, `AGGREGATE`, and `NONE`.
+The most useful fields are usually:
 
-## Running Tests
+- `inputName`: the name TaxonLens sent to GBIF
+- `matchedName`: the GBIF name returned
+- `matchType`: how GBIF matched it
+- `confidence`: GBIF confidence score
+- `usageKey`: GBIF taxon identifier
+- `acceptedUsageKey`: accepted GBIF taxon identifier, if the match is a synonym
 
-Run the Python unit tests:
+## Match Types
+
+GBIF may return:
+
+| Match type | Meaning |
+| --- | --- |
+| `EXACT` | GBIF found a direct name match |
+| `FUZZY` | GBIF found a likely match, but spelling or formatting differs |
+| `HIGHERRANK` | GBIF could only match to a higher rank, such as genus or family |
+| `AGGREGATE` | GBIF matched a broader species aggregate or complex |
+| `NONE` | GBIF could not find a confident match |
+
+Rows with `FUZZY`, `HIGHERRANK`, `AGGREGATE`, or `NONE` should usually be reviewed before downstream use.
+
+## Tests
+
+Run the Python tests:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -153,44 +225,41 @@ Check JavaScript syntax:
 node --check app.js
 ```
 
-These checks also run in GitHub Actions on pushes and pull requests.
+The same checks run automatically in GitHub Actions.
 
-## GitHub Pages Deployment
+## Deploying With GitHub Pages
 
-This repository is ready for GitHub Pages because the app is static.
-
-1. Go to the repository settings.
-2. Open **Pages**.
-3. Set the source to the `main` branch.
-4. Select the repository root as the publishing folder.
-5. Save.
+1. Open the repository on GitHub.
+2. Go to **Settings**.
+3. Open **Pages**.
+4. Choose the `main` branch.
+5. Select the repository root as the source folder.
+6. Save.
 
 The `.nojekyll` file is included so GitHub Pages serves the static files directly.
 
-## Project Structure
+## Project Layout
 
 ```text
 .
-├── index.html
-├── styles.css
-├── app.js
+├── index.html                  # Web app
+├── styles.css                  # Styling
+├── app.js                      # Browser parser and GBIF matching logic
 ├── cli/
-│   └── taxonlens.py
+│   └── taxonlens.py            # Command-line matcher
 ├── examples/
-│   └── demo-checklist.csv
+│   ├── demo-checklist.csv
+│   └── dada2-taxonomy.csv
 ├── tests/
 │   └── test_cli.py
-├── assets/
-│   └── ukceh/
-└── .github/
-    └── workflows/
-        └── tests.yml
+└── .github/workflows/tests.yml
 ```
 
 ## Roadmap
 
-- Manual column remapping UI.
-- GBIF alternatives drawer.
-- Wikidata cross-checking for GBIF and NCBI identifiers.
-- Offline pinned-backbone mode for fully reproducible analyses.
-- `gndiff`-style local checklist comparison mode.
+- Manual column remapping in the web app.
+- More ASV-table examples.
+- Better handling of genus-only and family-only assignments.
+- GBIF alternatives drawer for uncertain matches.
+- Wikidata and NCBI identifier cross-checking.
+- Offline matching against pinned taxonomy releases.

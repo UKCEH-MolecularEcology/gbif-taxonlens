@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sys
 import time
 import urllib.parse
@@ -69,6 +70,36 @@ def detect_column(headers: list[str], field: str) -> str | None:
     return None
 
 
+def clean_taxon_value(value: str | None) -> str:
+    value = (value or "").strip().strip("\"'")
+    value = re.sub(r"^[A-Za-z]__", "", value)
+    value = re.sub(r"^(uncultured|unclassified|unknown)\s+", "", value, flags=re.I)
+    return value.strip()
+
+
+def is_binomial(value: str) -> bool:
+    return bool(re.match(r"^[A-Z][A-Za-z-]+(\s+[a-z][A-Za-z-]+){1,2}$", value))
+
+
+def mapped_value(row: dict[str, str], mapping: dict[str, str], field: str) -> str:
+    column = mapping.get(field)
+    return clean_taxon_value(row.get(column, "") if column else "")
+
+
+def scientific_name_for_row(row: dict[str, str], mapping: dict[str, str]) -> str:
+    supplied = mapped_value(row, mapping, "scientificName")
+    genus = mapped_value(row, mapping, "genus")
+    specific = mapped_value(row, mapping, "specificEpithet")
+
+    if supplied and is_binomial(supplied):
+        return supplied
+    if genus and supplied and re.match(r"^[a-z][A-Za-z-]+$", supplied):
+        return f"{genus} {supplied}"
+    if genus and specific:
+        return f"{genus} {specific}"
+    return supplied or genus
+
+
 def load_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     dialect = sniff_dialect(path)
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -79,13 +110,12 @@ def load_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
 
 def build_params(row: dict[str, str], mapping: dict[str, str], default_kingdom: str) -> str:
     params = {
-        "name": row.get(mapping["scientificName"], ""),
+        "name": scientific_name_for_row(row, mapping),
         "verbose": "true",
         "strict": "false",
     }
     for field in ["kingdom", "phylum", "class", "order", "family", "genus"]:
-        column = mapping.get(field)
-        value = row.get(column, "") if column else ""
+        value = mapped_value(row, mapping, field)
         if field == "kingdom" and not value:
             value = default_kingdom
         if value:
@@ -102,7 +132,7 @@ def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str
     with urllib.request.urlopen(url, timeout=30) as response:
         match = json.loads(response.read().decode("utf-8"))
     return {
-        "inputName": row.get(mapping["scientificName"], ""),
+        "inputName": scientific_name_for_row(row, mapping),
         "matchedName": match.get("scientificName", ""),
         "canonicalName": match.get("canonicalName", ""),
         "matchType": match.get("matchType", "NONE"),
@@ -143,7 +173,10 @@ def main() -> int:
     rows_to_match = rows[: args.limit] if args.limit else rows
     results = []
     for index, row in enumerate(rows_to_match, start=1):
-        print(f"Matching {index}/{len(rows_to_match)}: {row.get(mapping['scientificName'], '')}", file=sys.stderr)
+        print(
+            f"Matching {index}/{len(rows_to_match)}: {scientific_name_for_row(row, mapping)}",
+            file=sys.stderr,
+        )
         results.append(match_row(row, mapping, args.default_kingdom))
         time.sleep(args.sleep)
 

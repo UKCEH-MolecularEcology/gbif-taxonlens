@@ -52,6 +52,31 @@ class TaxonLensCliTests(unittest.TestCase):
         self.assertEqual(params["rank"], ["SPECIES"])
         self.assertEqual(params["verbose"], ["true"])
 
+    def test_builds_name_from_dada2_genus_and_species_epithet(self):
+        row = {
+            "ASV": "ASV1",
+            "Kingdom": "k__Plantae",
+            "Phylum": "p__Streptophyta",
+            "Class": "c__Magnoliopsida",
+            "Order": "o__Fagales",
+            "Family": "f__Fagaceae",
+            "Genus": "g__Quercus",
+            "Species": "s__robur",
+        }
+        mapping = {
+            "scientificName": "Species",
+            "kingdom": "Kingdom",
+            "family": "Family",
+            "genus": "Genus",
+        }
+
+        params = parse_qs(taxonlens.build_params(row, mapping, ""))
+
+        self.assertEqual(params["name"], ["Quercus robur"])
+        self.assertEqual(params["kingdom"], ["Plantae"])
+        self.assertEqual(params["family"], ["Fagaceae"])
+        self.assertEqual(params["genus"], ["Quercus"])
+
     def test_writes_expected_output_fields(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "out.csv"

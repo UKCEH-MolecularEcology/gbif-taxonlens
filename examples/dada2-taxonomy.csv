@@ -1,0 +1,4 @@
+ASV,Kingdom,Phylum,Class,Order,Family,Genus,Species
+ASV1,k__Plantae,p__Streptophyta,c__Magnoliopsida,o__Fagales,f__Fagaceae,g__Quercus,s__robur
+ASV2,k__Plantae,p__Streptophyta,c__Magnoliopsida,o__Rosales,f__Rosaceae,g__Rosa,s__canina
+ASV3,k__Fungi,p__Ascomycota,c__Saccharomycetes,o__Saccharomycetales,f__Saccharomycetaceae,g__Saccharomyces,s__cerevisiae
