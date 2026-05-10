@@ -192,7 +192,9 @@ a {
 
 .button:disabled {
   cursor: not-allowed;
-  opacity: 0.45;
+  opacity: 1;
+  background: #d9ded8;
+  color: #6d736e;
 }
 
 .hero-panel,
@@ -348,19 +350,26 @@ a {
 
 .drop-zone {
   display: grid;
-  min-height: 220px;
+  min-height: 176px;
   place-items: center;
   border: 1px dashed #aab8aa;
   border-radius: 8px;
-  background: #fbfcf9;
-  padding: 24px;
+  background:
+    linear-gradient(180deg, rgba(219, 254, 82, 0.08), transparent),
+    #fbfcf9;
+  padding: 22px;
   text-align: center;
   cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
 }
 
 .drop-zone.dragging {
   border-color: var(--accent);
   background: #f7ffe0;
+  transform: translateY(-1px);
 }
 
 .drop-zone input {
@@ -369,31 +378,65 @@ a {
 
 .drop-icon {
   display: grid;
-  width: 46px;
-  height: 46px;
+  width: 54px;
+  height: 54px;
   place-items: center;
   border-radius: 8px;
   background: var(--lime);
   color: var(--black);
-  font-size: 28px;
+  font-size: 31px;
   font-weight: 500;
 }
 
+.drop-copy {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .drop-zone strong {
-  margin-top: 12px;
-  font-size: 18px;
+  font-size: 19px;
+  line-height: 1.1;
 }
 
 .drop-zone small {
-  max-width: 240px;
+  max-width: 260px;
   color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.control-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.control-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.control-card-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .controls {
   display: grid;
-  grid-template-columns: 1fr 1fr 110px;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin: 16px 0;
+  margin: 0;
+}
+
+.controls label:first-child {
+  grid-column: 1 / -1;
 }
 
 .reference-loader {
@@ -401,7 +444,11 @@ a {
 }
 
 .reference-loader input {
+  min-height: 46px;
   padding: 9px 12px;
+  border-style: dashed;
+  background: #fbfcf9;
+  font-size: 13px;
 }
 
 .reference-loader span {
@@ -410,20 +457,68 @@ a {
   line-height: 1.4;
 }
 
+.reference-loader .reference-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .check-row {
   display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 10px;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
   align-items: start;
-  margin: 0 0 16px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf9;
+  padding: 12px;
   color: var(--ink);
   font-size: 13px;
   line-height: 1.35;
 }
 
 .check-row input {
-  min-height: 18px;
-  width: 18px;
+  appearance: none;
+  min-height: 24px;
+  width: 24px;
+  border: 2px solid var(--black);
+  border-radius: 6px;
+  padding: 0;
+  margin: 1px auto 0;
+  display: grid;
+  place-items: center;
+}
+
+.check-row input:checked {
+  background: var(--data);
+}
+
+.check-row input:checked::after {
+  content: "";
+  width: 8px;
+  height: 13px;
+  border: solid var(--black);
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+  margin-top: -3px;
+}
+
+.check-row strong,
+.check-row small {
+  display: block;
+}
+
+.check-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.action-stack {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 label {

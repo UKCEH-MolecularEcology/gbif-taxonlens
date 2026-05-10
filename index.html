@@ -72,48 +72,65 @@
               <label class="drop-zone" for="fileInput" id="dropZone">
                 <input id="fileInput" type="file" accept=".csv,.tsv,.txt" />
                 <span class="drop-icon">+</span>
-                <strong>Drop a CSV or TSV taxonomy file</strong>
-                <small>Works with checklists and DADA2-style ASV taxonomy tables.</small>
+                <span class="drop-copy">
+                  <strong>Drop taxonomy file</strong>
+                  <small>CSV or TSV checklists, DADA2 taxonomy tables, and ASV exports.</small>
+                </span>
               </label>
-              <div class="controls">
-                <label>
-                  Match mode
-                  <select id="matchMode">
-                    <option value="gbif">GBIF live API</option>
-                    <option value="local">Local reference only</option>
-                    <option value="both">GBIF + local reference</option>
-                  </select>
+              <div class="control-card">
+                <div class="control-card-title">
+                  <span>Matching setup</span>
+                </div>
+                <div class="controls">
+                  <label>
+                    Match mode
+                    <select id="matchMode">
+                      <option value="gbif">GBIF live API</option>
+                      <option value="local">Local reference only</option>
+                      <option value="both">GBIF + local reference</option>
+                    </select>
+                  </label>
+                  <label>
+                    Default kingdom
+                    <select id="defaultKingdom">
+                      <option value="">Auto / not supplied</option>
+                      <option>Animalia</option>
+                      <option>Plantae</option>
+                      <option>Fungi</option>
+                      <option>Chromista</option>
+                      <option>Bacteria</option>
+                      <option>Archaea</option>
+                      <option>Protozoa</option>
+                      <option>Viruses</option>
+                    </select>
+                  </label>
+                  <label>
+                    Max rows
+                    <input id="maxRows" type="number" min="1" value="250" />
+                  </label>
+                </div>
+              </div>
+              <div class="control-card">
+                <div class="control-card-title">
+                  <span>Optional checks</span>
+                </div>
+                <label class="reference-loader" for="referenceInput">
+                  <span class="reference-label">Local reference checklist</span>
+                  <input id="referenceInput" type="file" accept=".csv,.tsv,.txt" />
+                  <span id="referenceStatus">Upload a pinned Backbone extract, curated checklist, or second taxonomy table.</span>
                 </label>
-                <label>
-                  Default kingdom
-                  <select id="defaultKingdom">
-                    <option value="">Auto / not supplied</option>
-                    <option>Animalia</option>
-                    <option>Plantae</option>
-                    <option>Fungi</option>
-                    <option>Chromista</option>
-                    <option>Bacteria</option>
-                    <option>Archaea</option>
-                    <option>Protozoa</option>
-                    <option>Viruses</option>
-                  </select>
-                </label>
-                <label>
-                  Max rows
-                  <input id="maxRows" type="number" min="1" value="250" />
+                <label class="check-row">
+                  <input id="wikidataCheck" type="checkbox" />
+                  <span>
+                    <strong>Wikidata identifier check</strong>
+                    <small>Look for linked GBIF and NCBI taxonomy identifiers after matching.</small>
+                  </span>
                 </label>
               </div>
-              <label class="reference-loader" for="referenceInput">
-                Local reference checklist
-                <input id="referenceInput" type="file" accept=".csv,.tsv,.txt" />
-                <span id="referenceStatus">Optional: upload a pinned GBIF Backbone extract, curated checklist, or second taxonomy table.</span>
-              </label>
-              <label class="check-row">
-                <input id="wikidataCheck" type="checkbox" />
-                Cross-check matched GBIF IDs against Wikidata for linked GBIF and NCBI identifiers
-              </label>
-              <button class="button primary full" id="runButton" disabled>Match with GBIF</button>
-              <button class="button secondary full" id="demoButton">Load demo file</button>
+              <div class="action-stack">
+                <button class="button primary full" id="runButton" disabled>Match with GBIF</button>
+                <button class="button secondary full" id="demoButton">Load demo file</button>
+              </div>
             </section>
 
             <section class="mapping-panel" id="schema">
