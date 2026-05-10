@@ -55,6 +55,8 @@ const els = {
   clearButton: document.querySelector("#clearButton"),
   downloadButton: document.querySelector("#downloadButton"),
   mappingList: document.querySelector("#mappingList"),
+  mappingHead: document.querySelector("#mappingHead"),
+  detectSummary: document.querySelector("#detectSummary"),
   healthList: document.querySelector("#healthList"),
   schemaBadge: document.querySelector("#schemaBadge"),
   resultsBody: document.querySelector("#resultsBody"),
@@ -181,10 +183,33 @@ function healthCheck(rows, mapping) {
 
 function renderMapping() {
   const fields = Object.entries(state.mapping);
-  els.schemaBadge.textContent = detectSchema(state.mapping);
+  const schema = detectSchema(state.mapping);
+  const hasName = Boolean(state.mapping.scientificName);
+  els.schemaBadge.textContent = schema;
   els.metricRows.textContent = state.rows.length;
   els.metricMapped.textContent = fields.length;
   els.metricIssues.textContent = state.health.length;
+  els.mappingHead.hidden = fields.length === 0;
+
+  if (!fields.length) {
+    els.detectSummary.innerHTML = `
+      <div>
+        <span class="summary-kicker">Waiting for file</span>
+        <strong>Upload or load the demo to inspect columns.</strong>
+      </div>
+      <span class="summary-status">Idle</span>
+    `;
+  } else {
+    els.detectSummary.innerHTML = `
+      <div>
+        <span class="summary-kicker">${escapeHtml(schema)} detected</span>
+        <strong>${state.rows.length} rows ready for GBIF matching.</strong>
+      </div>
+      <span class="summary-status ${hasName ? "ready" : "warning"}">
+        ${hasName ? "Ready to match" : "Needs name column"}
+      </span>
+    `;
+  }
 
   if (!fields.length) {
     els.mappingList.innerHTML = '<p class="empty">Upload a file to detect columns and taxonomy structure.</p>';
@@ -193,7 +218,7 @@ function renderMapping() {
       .map(
         ([field, info]) => `
           <div class="mapping-row">
-            <strong>${field}</strong>
+            <strong>${fieldLabel(field)}</strong>
             <code>${escapeHtml(info.column)}</code>
             <span class="confidence">${info.confidence}</span>
           </div>
@@ -205,6 +230,28 @@ function renderMapping() {
   els.healthList.innerHTML = state.health
     .map((item) => `<div class="health-item">${escapeHtml(item)}</div>`)
     .join("");
+}
+
+function fieldLabel(field) {
+  const labels = {
+    scientificName: "Scientific name",
+    canonicalName: "Canonical name",
+    authorship: "Authorship",
+    taxonID: "Taxon ID",
+    acceptedNameUsageID: "Accepted taxon ID",
+    parentNameUsageID: "Parent taxon ID",
+    taxonRank: "Taxon rank",
+    taxonomicStatus: "Taxonomic status",
+    kingdom: "Kingdom",
+    phylum: "Phylum",
+    class: "Class",
+    order: "Order",
+    family: "Family",
+    genus: "Genus",
+    specificEpithet: "Specific epithet",
+    infraspecificEpithet: "Infraspecific epithet",
+  };
+  return labels[field] || field;
 }
 
 function escapeHtml(value) {

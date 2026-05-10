@@ -404,7 +404,66 @@ input {
 .mapping-list {
   display: grid;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 8px;
+}
+
+.detect-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 22px 0 18px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--data);
+  border-radius: 8px;
+  background: #fbfff1;
+  padding: 16px 18px;
+}
+
+.detect-summary strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 19px;
+}
+
+.summary-kicker {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.summary-status {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.summary-status.ready {
+  background: var(--black);
+  color: var(--data);
+}
+
+.summary-status.warning {
+  background: #fff3d0;
+  color: #75501d;
+}
+
+.mapping-head {
+  display: grid;
+  grid-template-columns: 180px 1fr auto;
+  gap: 12px;
+  border-bottom: 2px solid var(--black);
+  padding: 0 0 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .mapping-row {
@@ -423,6 +482,7 @@ input {
 .mapping-row code {
   color: var(--black);
   font-weight: 700;
+  white-space: normal;
 }
 
 .confidence {
@@ -578,8 +638,14 @@ pre {
 
   .controls,
   .mapping-row,
+  .mapping-head,
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .detect-summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .site-footer {
