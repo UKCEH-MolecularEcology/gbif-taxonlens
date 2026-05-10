@@ -47,6 +47,10 @@ OUTPUT_FIELDS = [
     "kingdom",
     "family",
     "note",
+    "source",
+    "wikidataStatus",
+    "wikidataNcbiIds",
+    "localReferenceMatch",
 ]
 
 
@@ -145,6 +149,10 @@ def match_row(row: dict[str, str], mapping: dict[str, str], default_kingdom: str
         "kingdom": match.get("kingdom", ""),
         "family": match.get("family", ""),
         "note": match.get("note", ""),
+        "source": "GBIF",
+        "wikidataStatus": "",
+        "wikidataNcbiIds": "",
+        "localReferenceMatch": "",
     }
 
 

@@ -5,7 +5,27 @@ const state = {
   health: [],
   results: [],
   filter: "ALL",
+  reference: {
+    rows: [],
+    headers: [],
+    mapping: {},
+    source: "",
+  },
 };
+
+const editableFields = [
+  "scientificName",
+  "kingdom",
+  "phylum",
+  "class",
+  "order",
+  "family",
+  "genus",
+  "specificEpithet",
+  "taxonRank",
+  "authorship",
+  "taxonID",
+];
 
 const aliases = {
   scientificName: [
@@ -54,6 +74,13 @@ const els = {
   demoButton: document.querySelector("#demoButton"),
   clearButton: document.querySelector("#clearButton"),
   downloadButton: document.querySelector("#downloadButton"),
+  referenceInput: document.querySelector("#referenceInput"),
+  referenceStatus: document.querySelector("#referenceStatus"),
+  matchMode: document.querySelector("#matchMode"),
+  wikidataCheck: document.querySelector("#wikidataCheck"),
+  reviewDrawer: document.querySelector("#reviewDrawer"),
+  drawerClose: document.querySelector("#drawerClose"),
+  drawerContent: document.querySelector("#drawerContent"),
   mappingList: document.querySelector("#mappingList"),
   mappingHead: document.querySelector("#mappingHead"),
   detectSummary: document.querySelector("#detectSummary"),
@@ -143,6 +170,17 @@ function detectMapping(headers, rows) {
   return mapping;
 }
 
+function applyManualMapping(field, column) {
+  if (!column) {
+    delete state.mapping[field];
+  } else {
+    state.mapping[field] = { column, confidence: "Manual" };
+  }
+  state.health = healthCheck(state.rows, state.mapping);
+  els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
+  renderMapping();
+}
+
 function detectSchema(mapping) {
   if (
     mapping.kingdom &&
@@ -224,7 +262,7 @@ function scientificNameForRow(row) {
 function renderMapping() {
   const fields = Object.entries(state.mapping);
   const schema = detectSchema(state.mapping);
-  const hasName = Boolean(state.mapping.scientificName);
+  const hasName = Boolean(state.mapping.scientificName || state.mapping.genus);
   els.schemaBadge.textContent = schema;
   els.metricRows.textContent = state.rows.length;
   els.metricMapped.textContent = fields.length;
@@ -254,18 +292,33 @@ function renderMapping() {
   if (!fields.length) {
     els.mappingList.innerHTML = '<p class="empty">Upload a file to detect columns and taxonomy structure.</p>';
   } else {
-    els.mappingList.innerHTML = fields
+    els.mappingList.innerHTML = editableFields
       .map(
-        ([field, info]) => `
+        (field) => {
+          const info = state.mapping[field] || {};
+          return `
           <div class="mapping-row">
             <strong>${fieldLabel(field)}</strong>
-            <code>${escapeHtml(info.column)}</code>
-            <span class="confidence">${info.confidence}</span>
+            <select class="mapping-select" data-field="${field}">
+              <option value="">Not used</option>
+              ${state.headers
+                .map(
+                  (header) =>
+                    `<option value="${escapeHtml(header)}" ${header === info.column ? "selected" : ""}>${escapeHtml(header)}</option>`,
+                )
+                .join("")}
+            </select>
+            <span class="confidence">${info.confidence || "Unset"}</span>
           </div>
-        `,
+        `;
+        },
       )
       .join("");
   }
+
+  document.querySelectorAll(".mapping-select").forEach((select) => {
+    select.addEventListener("change", () => applyManualMapping(select.dataset.field, select.value));
+  });
 
   els.healthList.innerHTML = state.health
     .map((item) => `<div class="health-item">${escapeHtml(item)}</div>`)
@@ -314,12 +367,33 @@ function loadText(text) {
   state.mapping = detectMapping(parsed.headers, parsed.rows);
   state.health = healthCheck(parsed.rows, state.mapping);
   state.results = [];
-  els.runButton.disabled = !state.mapping.scientificName;
+  els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
   els.clearButton.disabled = false;
   els.downloadButton.disabled = true;
   els.previewStatus.textContent = state.mapping.scientificName ? "Detected" : "Needs mapping";
   renderMapping();
   renderResults();
+}
+
+function updateRunButtonLabel() {
+  const labels = {
+    gbif: "Match with GBIF",
+    local: "Compare locally",
+    both: "Match GBIF + local",
+  };
+  els.runButton.textContent = labels[els.matchMode.value] || labels.gbif;
+}
+
+async function handleReferenceFile(file) {
+  const text = await file.text();
+  const parsed = parseTable(text);
+  state.reference = {
+    rows: parsed.rows,
+    headers: parsed.headers,
+    mapping: detectMapping(parsed.headers, parsed.rows),
+    source: file.name,
+  };
+  els.referenceStatus.textContent = `${file.name}: ${parsed.rows.length} reference rows loaded.`;
 }
 
 function buildMatchParams(row) {
@@ -344,16 +418,33 @@ function buildMatchParams(row) {
 async function runMatching() {
   const maxRows = Number(els.maxRows.value || 250);
   const rows = state.rows.slice(0, maxRows);
+  const mode = els.matchMode.value;
+  if ((mode === "local" || mode === "both") && !state.reference.rows.length) {
+    els.previewStatus.textContent = "Need reference";
+    els.referenceStatus.textContent = "Upload a local reference checklist before using this mode.";
+    return;
+  }
   state.results = [];
   els.runButton.disabled = true;
-  els.previewStatus.textContent = "Matching";
+  els.previewStatus.textContent = mode === "local" ? "Comparing" : "Matching";
 
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
-    const params = buildMatchParams(row);
-    const response = await fetch(`https://api.gbif.org/v1/species/match?${params.toString()}`);
-    const match = await response.json();
-    state.results.push(formatResult(row, match));
+    let result;
+    if (mode === "local") {
+      result = formatLocalResult(row, matchLocalReference(row));
+    } else {
+      const params = buildMatchParams(row);
+      const response = await fetch(`https://api.gbif.org/v1/species/match?${params.toString()}`);
+      const match = await response.json();
+      result = formatResult(row, match);
+      result.alternatives = await fetchGbifAlternatives(result);
+      if (mode === "both") result.localMatch = matchLocalReference(row);
+      if (els.wikidataCheck.checked && result.usageKey) {
+        result.wikidata = await fetchWikidataLinks(result.usageKey);
+      }
+    }
+    state.results.push(result);
     els.previewStatus.textContent = `${index + 1}/${rows.length}`;
     renderResults();
   }
@@ -379,6 +470,130 @@ function formatResult(row, match) {
     kingdom: match.kingdom || "",
     family: match.family || "",
     note: match.note || "",
+    source: "GBIF",
+    alternatives: match.alternatives || match.alternativeMatches || [],
+    wikidata: null,
+    localMatch: null,
+  };
+}
+
+function formatLocalResult(row, localMatch) {
+  const inputName = scientificNameForRow(row);
+  return {
+    inputName,
+    matchedName: localMatch?.name || "",
+    canonicalName: localMatch?.canonical || "",
+    matchType: localMatch?.matchType || "NONE",
+    confidence: localMatch?.confidence ?? 0,
+    status: localMatch?.status || "",
+    rank: localMatch?.rank || "",
+    usageKey: localMatch?.taxonID || "",
+    acceptedUsageKey: "",
+    acceptedScientificName: "",
+    kingdom: localMatch?.kingdom || "",
+    family: localMatch?.family || "",
+    note: localMatch ? `Local reference: ${state.reference.source}` : "No local reference match",
+    source: "Local reference",
+    alternatives: localMatch?.alternatives || [],
+    wikidata: null,
+    localMatch,
+  };
+}
+
+function canonicalizeName(value) {
+  return cleanTaxonValue(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshtein(a, b) {
+  const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
+  for (let j = 0; j <= a.length; j += 1) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i += 1) {
+    for (let j = 1; j <= a.length; j += 1) {
+      matrix[i][j] =
+        b[i - 1] === a[j - 1]
+          ? matrix[i - 1][j - 1]
+          : Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function referenceNameForRow(row, mapping) {
+  const previous = state.mapping;
+  state.mapping = mapping;
+  const name = scientificNameForRow(row);
+  state.mapping = previous;
+  return name;
+}
+
+function matchLocalReference(row) {
+  if (!state.reference.rows.length) return null;
+  const query = canonicalizeName(scientificNameForRow(row));
+  if (!query) return null;
+  const candidates = state.reference.rows
+    .map((refRow) => {
+      const name = referenceNameForRow(refRow, state.reference.mapping);
+      const canonical = canonicalizeName(name);
+      const distance = levenshtein(query, canonical);
+      const maxLength = Math.max(query.length, canonical.length, 1);
+      const confidence = Math.max(0, Math.round((1 - distance / maxLength) * 100));
+      return { row: refRow, name, canonical, distance, confidence };
+    })
+    .filter((candidate) => candidate.name)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 5);
+  const best = candidates[0];
+  if (!best || best.confidence < 72) return null;
+  const mapping = state.reference.mapping;
+  return {
+    name: best.name,
+    canonical: best.canonical,
+    confidence: best.confidence,
+    matchType: best.confidence === 100 ? "EXACT" : "FUZZY",
+    taxonID: cleanTaxonValue(best.row[mapping.taxonID?.column]),
+    status: cleanTaxonValue(best.row[mapping.taxonomicStatus?.column]),
+    rank: cleanTaxonValue(best.row[mapping.taxonRank?.column]),
+    kingdom: cleanTaxonValue(best.row[mapping.kingdom?.column]),
+    family: cleanTaxonValue(best.row[mapping.family?.column]),
+    alternatives: candidates.slice(1),
+  };
+}
+
+async function fetchGbifAlternatives(result) {
+  if (!result.inputName || result.matchType === "EXACT") return [];
+  const params = new URLSearchParams({ q: result.inputName, limit: "5" });
+  const response = await fetch(`https://api.gbif.org/v1/species/suggest?${params.toString()}`);
+  if (!response.ok) return [];
+  return response.json();
+}
+
+async function fetchWikidataLinks(gbifId) {
+  const query = `
+    SELECT ?item ?itemLabel ?gbif ?ncbi WHERE {
+      ?item wdt:P846 "${gbifId}".
+      OPTIONAL { ?item wdt:P846 ?gbif. }
+      OPTIONAL { ?item wdt:P685 ?ncbi. }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+    } LIMIT 5
+  `;
+  const params = new URLSearchParams({ query, format: "json" });
+  const response = await fetch(`https://query.wikidata.org/sparql?${params.toString()}`, {
+    headers: { Accept: "application/sparql-results+json" },
+  });
+  if (!response.ok) return { status: "Unavailable", links: [] };
+  const data = await response.json();
+  return {
+    status: data.results.bindings.length ? "Linked" : "No Wikidata GBIF link",
+    links: data.results.bindings.map((binding) => ({
+      item: binding.item?.value || "",
+      label: binding.itemLabel?.value || "",
+      gbif: binding.gbif?.value || "",
+      ncbi: binding.ncbi?.value || "",
+    })),
   };
 }
 
@@ -388,7 +603,7 @@ function renderResults() {
   );
 
   if (!rows.length) {
-    els.resultsBody.innerHTML = '<tr><td colspan="7" class="empty-cell">No matches yet.</td></tr>';
+    els.resultsBody.innerHTML = '<tr><td colspan="8" class="empty-cell">No matches yet.</td></tr>';
     return;
   }
 
@@ -403,10 +618,45 @@ function renderResults() {
           <td>${escapeHtml(row.status)}</td>
           <td>${escapeHtml(row.rank)}</td>
           <td>${escapeHtml(row.usageKey)}</td>
+          <td><button class="button secondary mini review-button" data-name="${escapeHtml(row.inputName)}">Details</button></td>
         </tr>
       `,
     )
     .join("");
+
+  document.querySelectorAll(".review-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const result = state.results.find((item) => item.inputName === button.dataset.name);
+      if (result) openReviewDrawer(result);
+    });
+  });
+}
+
+function openReviewDrawer(result) {
+  const alternatives = result.alternatives || [];
+  const wikidataLinks = result.wikidata?.links || [];
+  els.drawerContent.innerHTML = `
+    <h3>${escapeHtml(result.inputName)}</h3>
+    <p class="drawer-muted">${escapeHtml(result.source || "GBIF")} result: ${escapeHtml(result.matchType)} (${escapeHtml(result.confidence)})</p>
+    <dl class="detail-list">
+      <dt>Matched name</dt><dd>${escapeHtml(result.matchedName || "No match")}</dd>
+      <dt>GBIF/local ID</dt><dd>${escapeHtml(result.usageKey || "None")}</dd>
+      <dt>Accepted name</dt><dd>${escapeHtml(result.acceptedScientificName || "Not supplied")}</dd>
+      <dt>Note</dt><dd>${escapeHtml(result.note || "None")}</dd>
+      <dt>Local reference</dt><dd>${result.localMatch ? `${escapeHtml(result.localMatch.name)} (${result.localMatch.confidence})` : "Not used or no match"}</dd>
+      <dt>Wikidata</dt><dd>${escapeHtml(result.wikidata?.status || "Not checked")}</dd>
+    </dl>
+    <h4>Alternative candidates</h4>
+    ${alternatives.length ? `<ul class="candidate-list">${alternatives
+      .map((item) => `<li>${escapeHtml(item.scientificName || item.name || "")} ${item.key || item.usageKey ? `<span>${escapeHtml(item.key || item.usageKey)}</span>` : ""}</li>`)
+      .join("")}</ul>` : '<p class="drawer-muted">No alternatives returned.</p>'}
+    <h4>Wikidata identifiers</h4>
+    ${wikidataLinks.length ? `<ul class="candidate-list">${wikidataLinks
+      .map((item) => `<li><a href="${escapeHtml(item.item)}" target="_blank" rel="noreferrer">${escapeHtml(item.label || item.item)}</a><span>GBIF ${escapeHtml(item.gbif || "-")} / NCBI ${escapeHtml(item.ncbi || "-")}</span></li>`)
+      .join("")}</ul>` : '<p class="drawer-muted">No Wikidata links available.</p>'}
+  `;
+  els.reviewDrawer.classList.add("open");
+  els.reviewDrawer.setAttribute("aria-hidden", "false");
 }
 
 function downloadCsv() {
@@ -424,11 +674,27 @@ function downloadCsv() {
     "kingdom",
     "family",
     "note",
+    "source",
+    "wikidataStatus",
+    "wikidataNcbiIds",
+    "localReferenceMatch",
   ];
   const lines = [
     headers.join(","),
     ...state.results.map((row) =>
-      headers.map((field) => JSON.stringify(String(row[field] ?? ""))).join(","),
+      headers
+        .map((field) => {
+          const value =
+            field === "wikidataStatus"
+              ? row.wikidata?.status || ""
+              : field === "wikidataNcbiIds"
+                ? (row.wikidata?.links || []).map((item) => item.ncbi).filter(Boolean).join("|")
+                : field === "localReferenceMatch"
+                  ? row.localMatch?.name || ""
+                  : row[field];
+          return JSON.stringify(String(value ?? ""));
+        })
+        .join(","),
     ),
   ];
   const blob = new Blob([lines.join("\n")], { type: "text/csv" });
@@ -443,6 +709,11 @@ function downloadCsv() {
 els.fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (file) handleFile(file);
+});
+
+els.referenceInput.addEventListener("change", (event) => {
+  const file = event.target.files?.[0];
+  if (file) handleReferenceFile(file);
 });
 
 ["dragenter", "dragover"].forEach((eventName) => {
@@ -467,20 +738,31 @@ els.dropZone.addEventListener("drop", (event) => {
 els.demoButton.addEventListener("click", () => loadText(demoCsv));
 els.runButton.addEventListener("click", runMatching);
 els.downloadButton.addEventListener("click", downloadCsv);
+els.matchMode.addEventListener("change", updateRunButtonLabel);
+els.drawerClose.addEventListener("click", () => {
+  els.reviewDrawer.classList.remove("open");
+  els.reviewDrawer.setAttribute("aria-hidden", "true");
+});
 els.clearButton.addEventListener("click", () => {
   state.rows = [];
   state.headers = [];
   state.mapping = {};
   state.health = [];
   state.results = [];
+  state.reference = { rows: [], headers: [], mapping: {}, source: "" };
   els.fileInput.value = "";
+  els.referenceInput.value = "";
   els.runButton.disabled = true;
   els.clearButton.disabled = true;
   els.downloadButton.disabled = true;
   els.previewStatus.textContent = "Ready";
+  els.referenceStatus.textContent =
+    "Optional: upload a pinned GBIF Backbone extract, curated checklist, or second taxonomy table.";
   renderMapping();
   renderResults();
 });
+
+updateRunButtonLabel();
 
 document.querySelectorAll(".chip").forEach((chip) => {
   chip.addEventListener("click", () => {

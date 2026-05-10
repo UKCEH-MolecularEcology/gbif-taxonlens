@@ -184,6 +184,12 @@ a {
   width: 100%;
 }
 
+.button.mini {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -385,9 +391,39 @@ a {
 
 .controls {
   display: grid;
-  grid-template-columns: 1fr 110px;
+  grid-template-columns: 1fr 1fr 110px;
   gap: 12px;
   margin: 16px 0;
+}
+
+.reference-loader {
+  margin-bottom: 12px;
+}
+
+.reference-loader input {
+  padding: 9px 12px;
+}
+
+.reference-loader span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.check-row {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.check-row input {
+  min-height: 18px;
+  width: 18px;
 }
 
 label {
@@ -407,6 +443,10 @@ input {
   background: white;
   color: var(--ink);
   padding: 0 12px;
+}
+
+.mapping-select {
+  min-height: 36px;
 }
 
 .mapping-list {
@@ -613,6 +653,90 @@ pre {
   color: rgba(255, 255, 255, 0.76);
   font-size: 14px;
   text-align: right;
+}
+
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: none;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.34);
+}
+
+.drawer.open {
+  display: flex;
+}
+
+.drawer-panel {
+  width: min(520px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  background: white;
+  padding: 28px;
+  box-shadow: -18px 0 60px rgba(0, 0, 0, 0.22);
+}
+
+.drawer-close {
+  float: right;
+  border: 0;
+  background: var(--black);
+  color: white;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.drawer-panel h3 {
+  margin: 8px 0 6px;
+  font-size: 28px;
+}
+
+.drawer-panel h4 {
+  margin: 24px 0 10px;
+  font-size: 16px;
+}
+
+.drawer-muted {
+  color: var(--muted);
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px 16px;
+  margin: 22px 0 0;
+}
+
+.detail-list dt {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.detail-list dd {
+  margin: 0;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.candidate-list li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.candidate-list span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 @media (max-width: 860px) {

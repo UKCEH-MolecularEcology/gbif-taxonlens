@@ -28,6 +28,8 @@ GBIF TaxonLens reads a taxonomy file, tries to detect useful columns, and sends 
 - confidence score
 - taxonomic status and rank
 - accepted GBIF name where available
+- alternative candidates for manual review
+- optional Wikidata links to GBIF and NCBI identifiers
 
 The goal is not to replace taxonomic judgement. The goal is to make the easy cases quick and the uncertain cases obvious.
 
@@ -59,6 +61,71 @@ http://localhost:8080
 ```
 
 You can also publish the repository with GitHub Pages because the app is just static HTML, CSS, and JavaScript.
+
+## Matching Modes
+
+The web app has three matching modes.
+
+### GBIF live API
+
+This is the default. Each row is sent to the public GBIF Species Match API.
+
+Use this when you want current GBIF Backbone matches and GBIF usage keys.
+
+### Local reference only
+
+Upload a second CSV/TSV file as the **Local reference checklist** and select **Local reference only**.
+
+TaxonLens will compare your input names against the uploaded reference file in the browser. It tries exact canonical matches first and then fuzzy local candidates. This is useful when you want a lightweight `gndiff`-style comparison against:
+
+- a curated project checklist
+- a pinned taxonomy export
+- a downloaded GBIF Backbone subset
+- a previous version of your own taxonomy table
+
+This mode does not call GBIF.
+
+### GBIF + local reference
+
+This mode calls GBIF and also compares each input row against your uploaded local reference. It is useful when you want to see whether the current GBIF match agrees with a pinned or curated reference.
+
+## Manual Column Mapping
+
+After upload, TaxonLens guesses which columns contain names, ranks, and higher taxonomy. You can change these choices in the **Autodetected taxonomy** panel.
+
+Use manual remapping when:
+
+- your scientific-name column has an unusual heading
+- your `Species` column contains only epithets, such as `robur`
+- your genus and species are stored in separate columns
+- your file has multiple possible ID columns
+
+For DADA2-style files, TaxonLens can combine `Genus` and an epithet-style `Species` value into a binomial name.
+
+## Review Drawer And Alternatives
+
+Each result row has a **Details** button. It opens a review drawer showing:
+
+- the matched name
+- the GBIF or local identifier
+- the accepted name, where available
+- GBIF notes
+- alternative GBIF or local candidates
+- Wikidata identifier links, if cross-checking was enabled
+
+Use this drawer to inspect fuzzy, higher-rank, aggregate, or unresolved matches before exporting.
+
+## Wikidata Cross-Checking
+
+Turn on **Cross-check matched GBIF IDs against Wikidata** before running a GBIF match.
+
+For each matched GBIF ID, TaxonLens queries Wikidata for linked identifiers:
+
+- GBIF taxon ID
+- NCBI taxonomy ID, where available
+- Wikidata item
+
+This is a useful audit step when you want to link GBIF-based names to sequence databases or check whether community identifiers agree. Wikidata results should still be reviewed, especially for homonyms and synonyms.
 
 ## Use It From The Terminal
 
@@ -186,6 +253,10 @@ acceptedScientificName
 kingdom
 family
 note
+source
+wikidataStatus
+wikidataNcbiIds
+localReferenceMatch
 ```
 
 The most useful fields are usually:
@@ -196,6 +267,10 @@ The most useful fields are usually:
 - `confidence`: GBIF confidence score
 - `usageKey`: GBIF taxon identifier
 - `acceptedUsageKey`: accepted GBIF taxon identifier, if the match is a synonym
+- `source`: whether the result came from GBIF or a local reference file
+- `wikidataStatus`: whether a Wikidata item was found for the matched GBIF ID
+- `wikidataNcbiIds`: NCBI taxonomy IDs linked from Wikidata, if any
+- `localReferenceMatch`: the local reference candidate, when local comparison was used
 
 ## Match Types
 
@@ -257,9 +332,7 @@ The `.nojekyll` file is included so GitHub Pages serves the static files directl
 
 ## Roadmap
 
-- Manual column remapping in the web app.
 - More ASV-table examples.
 - Better handling of genus-only and family-only assignments.
-- GBIF alternatives drawer for uncertain matches.
-- Wikidata and NCBI identifier cross-checking.
-- Offline matching against pinned taxonomy releases.
+- CLI support for local reference comparison.
+- Export of all alternative candidates, not only the selected match.

@@ -77,6 +77,14 @@
               </label>
               <div class="controls">
                 <label>
+                  Match mode
+                  <select id="matchMode">
+                    <option value="gbif">GBIF live API</option>
+                    <option value="local">Local reference only</option>
+                    <option value="both">GBIF + local reference</option>
+                  </select>
+                </label>
+                <label>
                   Default kingdom
                   <select id="defaultKingdom">
                     <option value="">Auto / not supplied</option>
@@ -95,6 +103,15 @@
                   <input id="maxRows" type="number" min="1" value="250" />
                 </label>
               </div>
+              <label class="reference-loader" for="referenceInput">
+                Local reference checklist
+                <input id="referenceInput" type="file" accept=".csv,.tsv,.txt" />
+                <span id="referenceStatus">Optional: upload a pinned GBIF Backbone extract, curated checklist, or second taxonomy table.</span>
+              </label>
+              <label class="check-row">
+                <input id="wikidataCheck" type="checkbox" />
+                Cross-check matched GBIF IDs against Wikidata for linked GBIF and NCBI identifiers
+              </label>
               <button class="button primary full" id="runButton" disabled>Match with GBIF</button>
               <button class="button secondary full" id="demoButton">Load demo file</button>
             </section>
@@ -153,6 +170,7 @@
                   <th>Status</th>
                   <th>Rank</th>
                   <th>GBIF key</th>
+                  <th>Review</th>
                 </tr>
               </thead>
               <tbody id="resultsBody">
@@ -163,6 +181,13 @@
             </table>
           </div>
         </section>
+
+        <aside class="drawer" id="reviewDrawer" aria-hidden="true">
+          <div class="drawer-panel">
+            <button class="drawer-close" id="drawerClose" aria-label="Close review drawer">x</button>
+            <div id="drawerContent"></div>
+          </div>
+        </aside>
 
         <section class="cli-section" id="cli">
           <div>
