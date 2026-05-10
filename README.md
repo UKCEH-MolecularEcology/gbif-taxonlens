@@ -37,18 +37,33 @@ The goal is not to replace taxonomic judgement. The goal is to make the easy cas
 
 ## Try It In A Browser
 
-Clone the repository:
+### No terminal needed
+
+1. Open the repository page: [UKCEH-MolecularEcology/gbif-taxonlens](https://github.com/UKCEH-MolecularEcology/gbif-taxonlens).
+2. Click the green **Code** button.
+3. Choose **Download ZIP**.
+4. Unzip the downloaded folder.
+5. Open the unzipped `gbif-taxonlens` folder.
+6. Double-click `index.html`.
+
+The app should open in your web browser. Your uploaded files stay in your browser; they are not uploaded to a server.
+
+### Terminal option
+
+If you use Git, you can clone the repository instead:
 
 ```bash
 git clone https://github.com/UKCEH-MolecularEcology/gbif-taxonlens.git
 cd gbif-taxonlens
 ```
 
-Open the app:
+On macOS, open the app with:
 
 ```bash
 open index.html
 ```
+
+On Windows or Linux, you can usually open `index.html` by double-clicking it in the folder.
 
 If your browser blocks local file behaviour, run a tiny local server instead:
 
