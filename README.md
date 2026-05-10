@@ -180,6 +180,13 @@ TaxonLens also reports:
 - most recent nearby record year
 - a plausibility category: `High plausibility`, `Moderate plausibility`, `Low plausibility`, `No GBIF support`, or `Data deficient`
 
+In the results table, use **Show location columns** to add the nearest-record distance, radius counts and most recent year to the main table.
+
+When location checks have run, the app offers two extra downloads:
+
+- **Download location CSV**: one row per input record, with plausibility score, nearest record, radius counts and most recent year.
+- **Download occurrence CSV**: one row per nearby GBIF occurrence record used in the location check.
+
 This is a plausibility check, not a definitive species distribution model. A “no nearby records” result may mean the species is genuinely unexpected, but it may also reflect gaps in GBIF occurrence data, sampling effort, taxonomic issues, or coordinate uncertainty.
 
 ## Use It From The Terminal

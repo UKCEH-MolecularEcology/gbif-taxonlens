@@ -80,6 +80,9 @@ const els = {
   demoButton: document.querySelector("#demoButton"),
   clearButton: document.querySelector("#clearButton"),
   downloadButton: document.querySelector("#downloadButton"),
+  downloadLocationButton: document.querySelector("#downloadLocationButton"),
+  downloadOccurrencesButton: document.querySelector("#downloadOccurrencesButton"),
+  showLocationColumns: document.querySelector("#showLocationColumns"),
   referenceInput: document.querySelector("#referenceInput"),
   referenceStatus: document.querySelector("#referenceStatus"),
   matchMode: document.querySelector("#matchMode"),
@@ -398,6 +401,8 @@ function loadText(text) {
   els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
   els.clearButton.disabled = false;
   els.downloadButton.disabled = true;
+  els.downloadLocationButton.disabled = true;
+  els.downloadOccurrencesButton.disabled = true;
   els.previewStatus.textContent = state.mapping.scientificName ? "Detected" : "Needs mapping";
   els.progressWrap.hidden = true;
   els.progressBar.style.width = "0";
@@ -500,6 +505,10 @@ async function runMatching() {
   els.previewStatus.textContent = "Complete";
   els.runButton.disabled = false;
   els.downloadButton.disabled = state.results.length === 0;
+  const hasLocationResults = state.results.some((result) => result.locationCheck);
+  const hasOccurrenceResults = state.results.some((result) => (result.locationCheck?.records || []).length);
+  els.downloadLocationButton.disabled = !hasLocationResults;
+  els.downloadOccurrencesButton.disabled = !hasOccurrenceResults;
 }
 
 function baseResult(row, rowNumber) {
@@ -782,6 +791,7 @@ function renderResults() {
           <td>${wikidataBadge(row)}</td>
           <td>${escapeHtml(ncbiIds(row) || "-")}</td>
           <td>${locationBadge(row)}</td>
+          ${locationExtraCells(row)}
           <td><button class="button secondary mini review-button" data-name="${escapeHtml(row.inputName)}">Details</button></td>
         </tr>
       `,
@@ -794,6 +804,19 @@ function renderResults() {
       if (result) openReviewDrawer(result);
     });
   });
+}
+
+function locationExtraCells(row) {
+  const hidden = els.showLocationColumns.checked ? "" : "hidden";
+  const check = row.locationCheck || {};
+  return `
+    <td class="location-extra" ${hidden}>${escapeHtml(check.nearestDistanceKm ?? "-")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[1] ?? "-")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[5] ?? "-")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[10] ?? "-")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[50] ?? "-")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.mostRecentYear || "-")}</td>
+  `;
 }
 
 function locationBadge(row) {
@@ -1002,6 +1025,102 @@ function downloadCsv() {
   URL.revokeObjectURL(url);
 }
 
+function downloadRows(filename, headers, rows) {
+  const lines = [
+    headers.join(","),
+    ...rows.map((row) => headers.map((field) => JSON.stringify(String(row[field] ?? ""))).join(",")),
+  ];
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function locationSummaryRows() {
+  return state.results.map((row) => ({
+    inputRow: row.inputRow,
+    inputName: row.inputName,
+    matchedName: row.matchedName,
+    usageKey: row.usageKey,
+    locationStatus: row.locationCheck?.status || "",
+    inputLatitude: row.locationCheck?.location?.lat ?? "",
+    inputLongitude: row.locationCheck?.location?.lon ?? "",
+    nearbyGbifOccurrenceCount: row.locationCheck?.count ?? "",
+    qualityFilteredOccurrenceCount: row.locationCheck?.qualityFilteredCount ?? "",
+    recordsWithin1Km: row.locationCheck?.counts?.[1] ?? "",
+    recordsWithin5Km: row.locationCheck?.counts?.[5] ?? "",
+    recordsWithin10Km: row.locationCheck?.counts?.[10] ?? "",
+    recordsWithin50Km: row.locationCheck?.counts?.[50] ?? "",
+    nearestGbifRecordKm: row.locationCheck?.nearestDistanceKm ?? "",
+    mostRecentNearbyGbifYear: row.locationCheck?.mostRecentYear ?? "",
+  }));
+}
+
+function occurrenceRows() {
+  return state.results.flatMap((row) =>
+    (row.locationCheck?.records || []).map((record) => ({
+      inputRow: row.inputRow,
+      inputName: row.inputName,
+      matchedName: row.matchedName,
+      usageKey: row.usageKey,
+      occurrenceKey: record.key,
+      occurrenceName: record.name,
+      distanceKm: record.distanceKm?.toFixed ? record.distanceKm.toFixed(3) : record.distanceKm,
+      decimalLatitude: record.lat,
+      decimalLongitude: record.lon,
+      country: record.country,
+      year: record.year,
+      basisOfRecord: record.basisOfRecord,
+      coordinateUncertaintyMeters: record.uncertaintyMeters,
+    })),
+  );
+}
+
+function downloadLocationCsv() {
+  const rows = locationSummaryRows();
+  const headers = [
+    "inputRow",
+    "inputName",
+    "matchedName",
+    "usageKey",
+    "locationStatus",
+    "inputLatitude",
+    "inputLongitude",
+    "nearbyGbifOccurrenceCount",
+    "qualityFilteredOccurrenceCount",
+    "recordsWithin1Km",
+    "recordsWithin5Km",
+    "recordsWithin10Km",
+    "recordsWithin50Km",
+    "nearestGbifRecordKm",
+    "mostRecentNearbyGbifYear",
+  ];
+  downloadRows("gbif-taxonlens-location-summary.csv", headers, rows);
+}
+
+function downloadOccurrenceCsv() {
+  const rows = occurrenceRows();
+  const headers = [
+    "inputRow",
+    "inputName",
+    "matchedName",
+    "usageKey",
+    "occurrenceKey",
+    "occurrenceName",
+    "distanceKm",
+    "decimalLatitude",
+    "decimalLongitude",
+    "country",
+    "year",
+    "basisOfRecord",
+    "coordinateUncertaintyMeters",
+  ];
+  downloadRows("gbif-taxonlens-location-occurrences.csv", headers, rows);
+}
+
 els.fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (file) handleFile(file);
@@ -1034,6 +1153,9 @@ els.dropZone.addEventListener("drop", (event) => {
 els.demoButton.addEventListener("click", () => loadText(demoCsv));
 els.runButton.addEventListener("click", runMatching);
 els.downloadButton.addEventListener("click", downloadCsv);
+els.downloadLocationButton.addEventListener("click", downloadLocationCsv);
+els.downloadOccurrencesButton.addEventListener("click", downloadOccurrenceCsv);
+els.showLocationColumns.addEventListener("change", renderResults);
 els.matchMode.addEventListener("change", updateRunButtonLabel);
 els.drawerClose.addEventListener("click", () => {
   els.reviewDrawer.classList.remove("open");
@@ -1051,6 +1173,8 @@ els.clearButton.addEventListener("click", () => {
   els.runButton.disabled = true;
   els.clearButton.disabled = true;
   els.downloadButton.disabled = true;
+  els.downloadLocationButton.disabled = true;
+  els.downloadOccurrencesButton.disabled = true;
   els.previewStatus.textContent = "Ready";
   els.progressWrap.hidden = true;
   els.progressBar.style.width = "0";

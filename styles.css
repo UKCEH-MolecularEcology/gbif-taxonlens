@@ -694,6 +694,7 @@ input {
 
 .filter-row {
   margin-bottom: 14px;
+  align-items: center;
 }
 
 .chip {
@@ -707,6 +708,27 @@ input {
   border-color: var(--black);
   background: var(--black);
   color: white;
+}
+
+.table-option {
+  display: inline-grid;
+  grid-template-columns: 18px auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.table-option input {
+  min-height: 16px;
+  width: 16px;
+  padding: 0;
 }
 
 .table-shell {
