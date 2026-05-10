@@ -10,9 +10,10 @@ It is designed for people working with biodiversity, metabarcoding, amplicon, ch
 - Which names need manual review?
 - Which GBIF taxon IDs should I carry into downstream analyses?
 
-You can use it in two ways:
+You can use it in three ways:
 
 - **Web app:** upload a CSV/TSV file in your browser.
+- **Google Colab notebook:** upload a file and run the matcher without installing anything.
 - **Command line:** run the same matching workflow from a terminal.
 
 The web app is static. There is no database and no user account. Your uploaded file is parsed in your browser; only the relevant name and classification fields are sent to the public GBIF API for matching.
@@ -61,6 +62,20 @@ http://localhost:8080
 ```
 
 You can also publish the repository with GitHub Pages because the app is just static HTML, CSS, and JavaScript.
+
+## Use It In Google Colab
+
+If you are new to the terminal, use the notebook:
+
+[Open the GBIF TaxonLens quickstart notebook in Google Colab](https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb)
+
+The notebook lets you:
+
+- use the included demo data
+- upload your own CSV/TSV file
+- run the matcher
+- preview the output table
+- download the matched CSV
 
 ## Matching Modes
 

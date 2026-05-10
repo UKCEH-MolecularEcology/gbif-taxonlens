@@ -23,7 +23,7 @@
         <nav class="topnav" aria-label="Primary navigation">
           <a href="#workspace">Workspace</a>
           <a href="#schema">Schema</a>
-          <a href="#cli">CLI</a>
+          <a href="#notebook">Notebook</a>
         </nav>
       </header>
 
@@ -38,7 +38,12 @@
             </p>
             <div class="hero-actions">
               <a class="button primary" href="#workspace">Start matching</a>
-              <a class="button ghost" href="#cli">Use the terminal</a>
+              <a
+                class="button ghost"
+                href="https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb"
+                target="_blank"
+                rel="noreferrer"
+              >Use in Colab</a>
             </div>
           </div>
           <div class="hero-panel" aria-label="Match summary preview">
@@ -206,15 +211,24 @@
           </div>
         </aside>
 
-        <section class="cli-section" id="cli">
+        <section class="cli-section" id="notebook">
           <div>
-            <h2>Terminal workflow</h2>
+            <h2>Notebook and terminal workflow</h2>
             <p>
-              The included Python script runs the same GBIF matching workflow for
-              reproducible batch jobs and pipelines.
+              New users can run the Colab notebook without installing anything.
+              Advanced users can use the included Python script for reproducible
+              batch jobs and pipelines.
             </p>
           </div>
-          <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
+          <div class="notebook-actions">
+            <a
+              class="button primary"
+              href="https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb"
+              target="_blank"
+              rel="noreferrer"
+            >Open Colab notebook</a>
+            <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
+          </div>
         </section>
       </main>
       <footer class="site-footer">

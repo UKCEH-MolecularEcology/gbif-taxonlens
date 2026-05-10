@@ -719,7 +719,14 @@ th {
   align-items: center;
 }
 
+.notebook-actions {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
 pre {
+  width: 100%;
   overflow-x: auto;
   border-radius: 8px;
   background: #000000;
