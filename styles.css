@@ -988,6 +988,116 @@ pre {
   font: inherit;
 }
 
+
+/* Leaflet layout fallback. Keep the essential positioning locally so the map
+   still renders as a real slippy map if the CDN stylesheet is delayed or blocked. */
+.location-map .leaflet-pane,
+.location-map .leaflet-tile,
+.location-map .leaflet-marker-icon,
+.location-map .leaflet-marker-shadow,
+.location-map .leaflet-tile-container,
+.location-map .leaflet-pane > svg,
+.location-map .leaflet-pane > canvas,
+.location-map .leaflet-zoom-box,
+.location-map .leaflet-image-layer,
+.location-map .leaflet-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.location-map .leaflet-container {
+  overflow: hidden;
+}
+
+.location-map .leaflet-tile,
+.location-map .leaflet-marker-icon,
+.location-map .leaflet-marker-shadow {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.location-map .leaflet-tile-pane {
+  z-index: 200;
+}
+
+.location-map .leaflet-overlay-pane {
+  z-index: 400;
+}
+
+.location-map .leaflet-marker-pane {
+  z-index: 600;
+}
+
+.location-map .leaflet-tooltip-pane {
+  z-index: 650;
+}
+
+.location-map .leaflet-popup-pane {
+  z-index: 700;
+}
+
+.location-map .leaflet-map-pane,
+.location-map .leaflet-pane,
+.location-map .leaflet-tile,
+.location-map .leaflet-marker-icon,
+.location-map .leaflet-marker-shadow,
+.location-map .leaflet-tile-container,
+.location-map .leaflet-pane > svg,
+.location-map .leaflet-pane > canvas {
+  pointer-events: auto;
+}
+
+.location-map .leaflet-top,
+.location-map .leaflet-bottom {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.location-map .leaflet-top {
+  top: 10px;
+}
+
+.location-map .leaflet-bottom {
+  bottom: 10px;
+}
+
+.location-map .leaflet-left {
+  left: 10px;
+}
+
+.location-map .leaflet-right {
+  right: 10px;
+}
+
+.location-map .leaflet-control {
+  position: relative;
+  z-index: 1000;
+  pointer-events: auto;
+  float: left;
+  clear: both;
+}
+
+.location-map .leaflet-right .leaflet-control {
+  float: right;
+}
+
+.location-map .leaflet-control a {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
+.location-map .leaflet-control-attribution {
+  max-width: calc(100% - 20px);
+  margin: 0;
+  padding: 3px 6px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--muted);
+  font-size: 10px;
+}
+
 .location-map .leaflet-control-zoom {
   border: 1px solid var(--line);
   border-radius: 8px;
