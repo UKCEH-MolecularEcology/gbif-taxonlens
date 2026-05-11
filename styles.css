@@ -973,10 +973,41 @@ pre {
 }
 
 .location-map {
-  height: 320px;
+  position: relative;
+  width: 100%;
+  height: min(420px, 58vh);
+  min-height: 340px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
+  background: #eef2ea;
+}
+
+.location-map.leaflet-container {
+  width: 100%;
+  font: inherit;
+}
+
+.location-map .leaflet-control-zoom {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.location-map .leaflet-control-zoom a {
+  width: 36px;
+  height: 36px;
+  line-height: 34px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.location-map .leaflet-control-zoom a:hover {
+  background: var(--lime);
+  color: #000000;
 }
 
 .location-score-grid {

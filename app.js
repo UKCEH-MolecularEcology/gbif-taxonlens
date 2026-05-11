@@ -1138,23 +1138,34 @@ function renderLocationMap(result) {
   const mapEl = document.querySelector("#locationMap");
   if (!mapEl || !check?.location || !window.L) return;
   setTimeout(() => {
-    const map = L.map(mapEl).setView([check.location.lat, check.location.lon], 7);
+    const map = L.map(mapEl, {
+      zoomControl: false,
+      scrollWheelZoom: true,
+    }).setView([check.location.lat, check.location.lon], 8);
+    L.control.zoom({ position: "topright" }).addTo(map);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
-    L.marker([check.location.lat, check.location.lon]).addTo(map).bindPopup("Input location");
+
+    const layers = [];
+    const inputMarker = L.marker([check.location.lat, check.location.lon]).bindPopup("Input location");
+    inputMarker.addTo(map);
+    layers.push(inputMarker);
+
     (check.radii || [1, 5, 10, 50]).forEach((radiusKm) => {
-      L.circle([check.location.lat, check.location.lon], {
+      const radius = L.circle([check.location.lat, check.location.lon], {
         radius: radiusKm * 1000,
         color: radiusKm === 50 ? "#000000" : "#90a968",
         weight: radiusKm === 50 ? 2 : 1,
         fillColor: "#dbfe52",
         fillOpacity: radiusKm === 50 ? 0.08 : 0.03,
       }).addTo(map);
+      layers.push(radius);
     });
+
     (check.records || []).forEach((record) => {
-      L.circleMarker([record.lat, record.lon], {
+      const marker = L.circleMarker([record.lat, record.lon], {
         radius: 5,
         color: "#477ae2",
         fillColor: "#477ae2",
@@ -1162,9 +1173,16 @@ function renderLocationMap(result) {
       })
         .addTo(map)
         .bindPopup(`${escapeHtml(record.name)}<br>${escapeHtml(record.country)} ${escapeHtml(record.year)}`);
+      layers.push(marker);
     });
-    map.invalidateSize();
-  }, 80);
+
+    map.invalidateSize(true);
+    const bounds = L.featureGroup(layers).getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [22, 22], maxZoom: 11 });
+    }
+    setTimeout(() => map.invalidateSize(true), 120);
+  }, 120);
 }
 
 function downloadCsv() {
