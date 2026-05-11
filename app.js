@@ -1077,6 +1077,11 @@ function openReviewDrawer(result) {
   renderLocationMap(result);
 }
 
+function closeReviewDrawer() {
+  els.reviewDrawer.classList.remove("open");
+  els.reviewDrawer.setAttribute("aria-hidden", "true");
+}
+
 function locationSummary(result) {
   if (!result.locationCheck) return "Not checked";
   if (!result.locationCheck.location) return escapeHtml(result.locationCheck.status);
@@ -1366,9 +1371,14 @@ els.downloadLocationButton.addEventListener("click", downloadLocationCsv);
 els.downloadOccurrencesButton.addEventListener("click", downloadOccurrenceCsv);
 els.showLocationColumns.addEventListener("change", renderResults);
 els.matchMode.addEventListener("change", updateRunButtonLabel);
-els.drawerClose.addEventListener("click", () => {
-  els.reviewDrawer.classList.remove("open");
-  els.reviewDrawer.setAttribute("aria-hidden", "true");
+els.drawerClose.addEventListener("click", closeReviewDrawer);
+els.reviewDrawer.addEventListener("click", (event) => {
+  if (event.target === els.reviewDrawer) closeReviewDrawer();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && els.reviewDrawer.classList.contains("open")) {
+    closeReviewDrawer();
+  }
 });
 els.clearButton.addEventListener("click", () => {
   state.rows = [];
