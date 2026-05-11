@@ -1149,7 +1149,13 @@ function renderLocationMap(result) {
     }).addTo(map);
 
     const layers = [];
-    const inputMarker = L.marker([check.location.lat, check.location.lon]).bindPopup("Input location");
+    const inputMarker = L.circleMarker([check.location.lat, check.location.lon], {
+      radius: 8,
+      color: "#000000",
+      weight: 2,
+      fillColor: "#dbfe52",
+      fillOpacity: 0.95,
+    }).bindPopup("Input location");
     inputMarker.addTo(map);
     layers.push(inputMarker);
 
