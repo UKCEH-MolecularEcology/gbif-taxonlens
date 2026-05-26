@@ -155,7 +155,7 @@
 
                 <!-- Taxonomy Fields Auto-detection & Manual mapping panel (Elevated in priority!) -->
                 <div class="control-panel mapping-card">
-                  <div class="panel-header header-inline">
+                  <div class="panel-header header-inline flex-wrap gap-8">
                     <h3><i data-lucide="binary"></i> Schema Mapping</h3>
                     <span class="badge" id="schemaBadge">No File</span>
                   </div>
@@ -166,6 +166,10 @@
                       <small>Upload a file to view columns.</small>
                     </div>
                   </div>
+
+                  <button class="btn btn-outline btn-small full-width" id="openMapperBtn" style="margin: 10px 0 5px;" disabled>
+                    <i data-lucide="external-link"></i> Open Advanced Mapper
+                  </button>
 
                   <div class="mapping-table-header" id="mappingHead" hidden>
                     <span>Field</span>
@@ -503,6 +507,76 @@
           </div>
         </section>
       </main>
+
+      <!-- Premium Glassmorphic Advanced Schema Mapper Modal -->
+      <div class="modal-backdrop" id="mappingModal" aria-hidden="true" hidden>
+        <div class="modal-window">
+          <header class="modal-header">
+            <div class="modal-header-title">
+              <span class="modal-kicker">Interactive Configuration</span>
+              <h3><i data-lucide="binary"></i> Advanced Schema Mapper</h3>
+            </div>
+            <div class="modal-actions-top">
+              <button class="btn btn-outline btn-mini" id="autoMapBtn">
+                <i data-lucide="sparkles"></i> Smart Auto-Map
+              </button>
+              <button class="btn btn-outline btn-mini btn-danger-outline" id="clearMapBtn">
+                <i data-lucide="trash-2"></i> Reset Mappings
+              </button>
+              <button class="modal-close-btn" id="modalClose" aria-label="Close schema mapper">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+          </header>
+          
+          <div class="modal-body-layout">
+            <!-- Left Side: Interactive Mapping List -->
+            <div class="modal-left-pane">
+              <div class="mapper-search-wrapper">
+                <i data-lucide="search" class="search-icon"></i>
+                <input type="text" id="mapperSearch" placeholder="Search schema fields..." />
+              </div>
+              
+              <div class="mapper-accordion-container" id="mapperAccordion">
+                <!-- Populated dynamically via JS -->
+              </div>
+            </div>
+            
+            <!-- Right Side: Live CSV Table Preview & Guide -->
+            <div class="modal-right-pane">
+              <div class="pane-section-title">
+                <h4><i data-lucide="eye"></i> Uploaded Data Preview (First 5 Rows)</h4>
+                <span class="subtext">Highlighted headers represent mapped columns</span>
+              </div>
+              <div class="preview-table-wrapper">
+                <table class="preview-data-table" id="modalPreviewTable">
+                  <!-- Rendered dynamically in app.js -->
+                </table>
+              </div>
+              
+              <div class="mapper-guide-box">
+                <h4><i data-lucide="info"></i> Quick Integration Guide</h4>
+                <p>
+                  To match your taxonomic checklist against the GBIF backbone, you must map at least the <strong>Scientific Name</strong> or <strong>Genus</strong> fields. 
+                  Adding geographical coordinates (<strong>Decimal Latitude</strong> & <strong>Decimal Longitude</strong>) allows spatial plausibility and location audit checks.
+                </p>
+                <div class="health-checklist-modal" id="modalHealthList">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <footer class="modal-footer">
+            <div class="modal-footer-status" id="modalStatusMsg">
+              No files mapped.
+            </div>
+            <button class="btn btn-primary btn-large" id="modalApplyBtn">
+              <i data-lucide="check"></i> Apply & Close Mapper
+            </button>
+          </footer>
+        </div>
+      </div>
 
       <!-- Elegant slide-in Details Drawer -->
       <aside class="drawer-backdrop" id="reviewDrawer" aria-hidden="true">

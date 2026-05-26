@@ -133,7 +133,20 @@ const els = {
   tableSearchQuery: document.querySelector("#tableSearchQuery"),
   mapPlotCounter: document.querySelector("#mapPlotCounter"),
   mapLayerSelect: document.querySelector("#mapLayerSelect"),
-  mapResetViewBtn: document.querySelector("#mapResetViewBtn")
+  mapResetViewBtn: document.querySelector("#mapResetViewBtn"),
+
+  // Advanced Schema Mapper Elements
+  openMapperBtn: document.querySelector("#openMapperBtn"),
+  mappingModal: document.querySelector("#mappingModal"),
+  modalClose: document.querySelector("#modalClose"),
+  modalApplyBtn: document.querySelector("#modalApplyBtn"),
+  autoMapBtn: document.querySelector("#autoMapBtn"),
+  clearMapBtn: document.querySelector("#clearMapBtn"),
+  mapperSearch: document.querySelector("#mapperSearch"),
+  mapperAccordion: document.querySelector("#mapperAccordion"),
+  modalPreviewTable: document.querySelector("#modalPreviewTable"),
+  modalStatusMsg: document.querySelector("#modalStatusMsg"),
+  modalHealthList: document.querySelector("#modalHealthList")
 };
 
 // Global Map instances and Chart references
@@ -245,6 +258,13 @@ function applyManualMapping(field, column) {
   els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
   renderMapping();
   updateDashboardHealthLog();
+
+  // Sync to Advanced Mapper Modal if open
+  if (els.mappingModal && !els.mappingModal.hidden) {
+    updateModalFieldPreviewText(field, column);
+    renderModalPreviewTable();
+    updateModalStatusAndChecklist();
+  }
 }
 
 function detectSchema(mapping) {
@@ -501,6 +521,7 @@ function loadText(text) {
   state.results = [];
   els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
   els.clearButton.disabled = false;
+  els.openMapperBtn.disabled = false;
   els.downloadButton.disabled = true;
   els.downloadLocationButton.disabled = true;
   els.downloadOccurrencesButton.disabled = true;
@@ -1759,6 +1780,322 @@ function downloadOccurrenceCsv() {
   downloadRows("gbif-taxonlens-location-occurrences.csv", headers, rows);
 }
 
+// ==========================================
+// ADVANCED SCHEMA MAPPER MODAL COMPONENTS
+// ==========================================
+
+const fieldCategories = [
+  {
+    id: "core",
+    name: "Core Taxonomy",
+    icon: "sparkles",
+    fields: ["scientificName", "genus", "specificEpithet", "taxonRank", "authorship"],
+    expanded: true
+  },
+  {
+    id: "higher",
+    name: "Higher Classification",
+    icon: "git-fork",
+    fields: ["kingdom", "phylum", "class", "order", "family"],
+    expanded: false
+  },
+  {
+    id: "spatial",
+    name: "Location / Coordinates",
+    icon: "map-pin",
+    fields: ["decimalLatitude", "decimalLongitude", "country"],
+    expanded: false
+  },
+  {
+    id: "metadata",
+    name: "System Identifiers",
+    icon: "key",
+    fields: ["taxonID"],
+    expanded: false
+  }
+];
+
+function renderModalMapper(searchQuery = "") {
+  const q = searchQuery.toLowerCase().trim();
+  
+  // Render Left Pane (Accordion)
+  let html = "";
+  
+  fieldCategories.forEach((cat) => {
+    // Filter fields based on search query
+    const filteredFields = cat.fields.filter(field => {
+      const label = fieldLabel(field).toLowerCase();
+      const name = field.toLowerCase();
+      return label.includes(q) || name.includes(q);
+    });
+    
+    if (q && filteredFields.length === 0) {
+      return;
+    }
+    
+    const isExpanded = cat.expanded || q.length > 0;
+    const isCollapsedClass = isExpanded ? "" : "collapsed";
+    const isActiveClass = isExpanded ? "active-group" : "";
+    
+    html += `
+      <div class="mapper-group-card ${isCollapsedClass} ${isActiveClass}" id="group-card-${cat.id}">
+        <header class="mapper-group-header" data-cat-id="${cat.id}">
+          <div class="mapper-group-header-title">
+            <i data-lucide="${cat.icon}"></i>
+            <span>${cat.name}</span>
+          </div>
+          <i data-lucide="chevron-down" class="chevron-icon"></i>
+        </header>
+        <div class="mapper-group-content">
+          ${filteredFields.map(field => {
+            const info = state.mapping[field] || {};
+            const isMapped = !!info.column;
+            const confClass = info.confidence ? info.confidence.toLowerCase() : "unset";
+            
+            // Get live column preview of first 3 non-empty values
+            let previewText = "<em>Unmapped</em>";
+            if (isMapped) {
+              const vals = [];
+              for (const r of state.rows) {
+                const val = r[info.column];
+                if (val !== undefined && val !== null && String(val).trim()) {
+                  vals.push(String(val).trim());
+                  if (vals.length >= 3) break;
+                }
+              }
+              previewText = vals.length > 0 
+                ? `Preview: <strong>${vals.map(v => `"${escapeHtml(v)}"`).join(", ")}</strong>`
+                : "Preview: <em>(All empty)</em>";
+            }
+            
+            return `
+              <div class="modal-mapping-row" data-field-row="${field}">
+                <div class="modal-mapping-row-meta">
+                  <strong>${fieldLabel(field)}</strong>
+                  <span class="confidence-tag ${confClass}">${info.confidence || "Unset"}</span>
+                </div>
+                <select class="mapping-select modal-mapping-select" data-field="${field}">
+                  <option value="">(Not mapped)</option>
+                  ${state.headers.map(header => `
+                    <option value="${escapeHtml(header)}" ${header === info.column ? "selected" : ""}>
+                      ${escapeHtml(header)}
+                    </option>
+                  `).join("")}
+                </select>
+                <span class="modal-column-preview-text" id="preview-text-${field}">
+                  ${previewText}
+                </span>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  });
+  
+  if (!html) {
+    html = `<p class="empty-mapping">No fields match your search "${escapeHtml(searchQuery)}"</p>`;
+  }
+  
+  els.mapperAccordion.innerHTML = html;
+  
+  // Attach event listeners for accordion headers
+  document.querySelectorAll(".mapper-group-header").forEach(header => {
+    header.addEventListener("click", () => {
+      const catId = header.dataset.catId;
+      const card = document.querySelector(`#group-card-${catId}`);
+      if (card) {
+        const isCollapsed = card.classList.contains("collapsed");
+        card.classList.toggle("collapsed");
+        card.classList.toggle("active-group", isCollapsed);
+        
+        // Save expansion state
+        const cat = fieldCategories.find(c => c.id === catId);
+        if (cat) cat.expanded = isCollapsed;
+      }
+    });
+  });
+  
+  // Attach change event listeners to select elements in modal
+  document.querySelectorAll(".modal-mapping-select").forEach(select => {
+    select.addEventListener("change", () => {
+      const field = select.dataset.field;
+      const col = select.value;
+      
+      applyManualMapping(field, col);
+    });
+  });
+  
+  // Create lucide icons
+  lucide.createIcons();
+}
+
+function updateModalFieldPreviewText(field, col) {
+  const pSpan = document.querySelector(`#preview-text-${field}`);
+  if (!pSpan) return;
+  
+  if (!col) {
+    pSpan.innerHTML = "<em>Unmapped</em>";
+    return;
+  }
+  
+  const vals = [];
+  for (const r of state.rows) {
+    const val = r[col];
+    if (val !== undefined && val !== null && String(val).trim()) {
+      vals.push(String(val).trim());
+      if (vals.length >= 3) break;
+    }
+  }
+  
+  pSpan.innerHTML = vals.length > 0 
+    ? `Preview: <strong>${vals.map(v => `"${escapeHtml(v)}"`).join(", ")}</strong>`
+    : "Preview: <em>(All empty)</em>";
+}
+
+function renderModalPreviewTable() {
+  if (!state.rows.length) {
+    els.modalPreviewTable.innerHTML = "<tr><td>No data available.</td></tr>";
+    return;
+  }
+  
+  // Get currently mapped columns
+  const mappedCols = new Set(
+    Object.values(state.mapping)
+      .map(info => info.column)
+      .filter(Boolean)
+  );
+  
+  // Render Headers
+  let headerHtml = "<tr>";
+  state.headers.forEach(header => {
+    const isMapped = mappedCols.has(header);
+    const mappedClass = isMapped ? "mapped-col" : "";
+    
+    // Find what field(s) this column maps to
+    const mappedFields = Object.entries(state.mapping)
+      .filter(([field, info]) => info.column === header)
+      .map(([field, info]) => fieldLabel(field));
+    
+    const tooltipText = mappedFields.length > 0 
+      ? `Maps to: ${mappedFields.join(", ")}`
+      : "Unmapped column";
+      
+    headerHtml += `
+      <th class="${mappedClass}" title="${escapeHtml(tooltipText)}">
+        ${escapeHtml(header)}
+      </th>
+    `;
+  });
+  headerHtml += "</tr>";
+  
+  // Render Rows (first 5)
+  let rowsHtml = "";
+  const previewRows = state.rows.slice(0, 5);
+  
+  previewRows.forEach(row => {
+    rowsHtml += "<tr>";
+    state.headers.forEach(header => {
+      const isMapped = mappedCols.has(header);
+      const mappedClass = isMapped ? "mapped-col-cell" : "";
+      const val = row[header] !== undefined ? row[header] : "";
+      rowsHtml += `<td class="${mappedClass}">${escapeHtml(String(val))}</td>`;
+    });
+    rowsHtml += "</tr>";
+  });
+  
+  els.modalPreviewTable.innerHTML = headerHtml + rowsHtml;
+}
+
+function updateModalStatusAndChecklist() {
+  // Count total mapped columns
+  const fields = Object.entries(state.mapping);
+  const mappedCount = fields.filter(([f, info]) => !!info.column).length;
+  
+  const schema = detectSchema(state.mapping);
+  els.modalStatusMsg.innerHTML = `
+    <i data-lucide="info"></i> <strong>${mappedCount} / ${editableFields.length} fields mapped</strong> &middot; Schema: <strong>${escapeHtml(schema)}</strong>
+  `;
+  
+  // Render health checks in modal
+  const hasSciName = !!state.mapping.scientificName?.column;
+  const hasGenus = !!state.mapping.genus?.column;
+  const hasCoords = !!state.mapping.decimalLatitude?.column && !!state.mapping.decimalLongitude?.column;
+  const hasHigher = !!state.mapping.family?.column || !!state.mapping.kingdom?.column;
+  
+  els.modalHealthList.innerHTML = `
+    <div class="health-item-modal ${(hasSciName || hasGenus) ? 'valid' : 'invalid'}">
+      <i data-lucide="${(hasSciName || hasGenus) ? 'check-circle' : 'alert-circle'}"></i>
+      <span>Taxon Field Mapped</span>
+    </div>
+    <div class="health-item-modal ${hasCoords ? 'valid' : 'invalid'}">
+      <i data-lucide="${hasCoords ? 'check-circle' : 'alert-circle'}"></i>
+      <span>Coordinates Mapped</span>
+    </div>
+    <div class="health-item-modal ${hasHigher ? 'valid' : 'invalid'}">
+      <i data-lucide="${hasHigher ? 'check-circle' : 'alert-circle'}"></i>
+      <span>Higher Taxonomy Mapped</span>
+    </div>
+  `;
+  
+  lucide.createIcons();
+}
+
+function runSmartAutoMap() {
+  const newMapping = detectMapping(state.headers, state.rows);
+  state.mapping = newMapping;
+  state.health = healthCheck(state.rows, state.mapping);
+  
+  renderModalMapper(els.mapperSearch.value);
+  renderModalPreviewTable();
+  updateModalStatusAndChecklist();
+  renderMapping();
+  
+  // Visual pulse on table wrapper
+  const wrap = document.querySelector(".preview-table-wrapper");
+  if (wrap) {
+    wrap.style.animation = "none";
+    setTimeout(() => {
+      wrap.style.border = "1px solid var(--primary)";
+      wrap.style.boxShadow = "0 0 0 4px rgba(38, 166, 91, 0.15)";
+      setTimeout(() => {
+        wrap.style.border = "";
+        wrap.style.boxShadow = "";
+      }, 500);
+    }, 10);
+  }
+}
+
+function clearModalMappings() {
+  state.mapping = {};
+  state.health = healthCheck(state.rows, state.mapping);
+  
+  renderModalMapper(els.mapperSearch.value);
+  renderModalPreviewTable();
+  updateModalStatusAndChecklist();
+  renderMapping();
+}
+
+function openMappingModal() {
+  if (!state.rows.length) return;
+  
+  renderModalMapper();
+  renderModalPreviewTable();
+  updateModalStatusAndChecklist();
+  
+  els.mapperSearch.value = "";
+  els.mappingModal.hidden = false;
+  els.mappingModal.setAttribute("aria-hidden", "false");
+}
+
+function closeMappingModal() {
+  els.mappingModal.hidden = true;
+  els.mappingModal.setAttribute("aria-hidden", "true");
+  
+  els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
+  els.previewStatus.textContent = state.mapping.scientificName ? "Detected" : "Needs mapping";
+}
+
 // Bind UI event listeners
 
 els.fileInput.addEventListener("change", (event) => {
@@ -1803,11 +2140,29 @@ els.reviewDrawer.addEventListener("click", (event) => {
   if (event.target === els.reviewDrawer) closeReviewDrawer();
 });
 
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && els.reviewDrawer.classList.contains("open")) {
-    closeReviewDrawer();
+// Advanced Schema Mapper Modal Bindings
+els.openMapperBtn.addEventListener("click", openMappingModal);
+els.modalClose.addEventListener("click", closeMappingModal);
+els.modalApplyBtn.addEventListener("click", closeMappingModal);
+els.autoMapBtn.addEventListener("click", runSmartAutoMap);
+els.clearMapBtn.addEventListener("click", clearModalMappings);
+
+els.mapperSearch.addEventListener("input", (e) => {
+  renderModalMapper(e.target.value);
+});
+
+els.mappingModal.addEventListener("click", (event) => {
+  if (event.target === els.mappingModal) {
+    closeMappingModal();
   }
 });
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && els.mappingModal && !els.mappingModal.hidden) {
+    closeMappingModal();
+  }
+});
+
 
 // Search input keyup query listener
 els.tableSearchQuery.addEventListener("input", (e) => {
@@ -1828,6 +2183,7 @@ els.clearButton.addEventListener("click", () => {
   els.referenceInput.value = "";
   els.runButton.disabled = true;
   els.clearButton.disabled = true;
+  els.openMapperBtn.disabled = true;
   els.downloadButton.disabled = true;
   els.downloadLocationButton.disabled = true;
   els.downloadOccurrencesButton.disabled = true;
