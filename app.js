@@ -376,7 +376,10 @@ function renderMapping() {
           const confClass = info.confidence ? info.confidence.toLowerCase() : "unset";
           return `
           <div class="mapping-row">
-            <strong>${fieldLabel(field)}</strong>
+            <div class="mapping-row-meta">
+              <strong>${fieldLabel(field)}</strong>
+              <span class="confidence-tag ${confClass}">${info.confidence || "Unset"}</span>
+            </div>
             <select class="mapping-select" data-field="${field}">
               <option value="">Not used</option>
               ${state.headers
@@ -386,7 +389,6 @@ function renderMapping() {
                 )
                 .join("")}
             </select>
-            <span class="confidence-tag ${confClass}">${info.confidence || "Unset"}</span>
           </div>
         `;
         },
