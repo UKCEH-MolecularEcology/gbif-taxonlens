@@ -1,3 +1,5 @@
+// GBIF TaxonLens - Core Application Logic (Interactive Dashboard Edition)
+
 const state = {
   rows: [],
   headers: [],
@@ -5,6 +7,7 @@ const state = {
   health: [],
   results: [],
   filter: "ALL",
+  searchQuery: "",
   reference: {
     rows: [],
     headers: [],
@@ -85,6 +88,7 @@ const demoCsv = `id,scientificName,kingdom,family,taxonRank,decimalLatitude,deci
 4,Carex binervis,Plantae,Cyperaceae,SPECIES,54.5973,-5.9301
 5,Quercus robur,Plantae,Fagaceae,SPECIES,51.7520,-1.2577`;
 
+// Element DOM References
 const els = {
   fileInput: document.querySelector("#fileInput"),
   dropZone: document.querySelector("#dropZone"),
@@ -119,7 +123,42 @@ const els = {
   metricRows: document.querySelector("#metricRows"),
   metricMapped: document.querySelector("#metricMapped"),
   metricIssues: document.querySelector("#metricIssues"),
+  
+  // New Dashboard Element References
+  dashKpiTotal: document.querySelector("#dashKpiTotal"),
+  dashKpiMatchRate: document.querySelector("#dashKpiMatchRate"),
+  dashKpiSpatial: document.querySelector("#dashKpiSpatial"),
+  dashKpiWikidata: document.querySelector("#dashKpiWikidata"),
+  dashboardHealthLog: document.querySelector("#dashboardHealthLog"),
+  tableSearchQuery: document.querySelector("#tableSearchQuery"),
+  mapPlotCounter: document.querySelector("#mapPlotCounter"),
+  mapLayerSelect: document.querySelector("#mapLayerSelect"),
+  mapResetViewBtn: document.querySelector("#mapResetViewBtn")
 };
+
+// Global Map instances and Chart references
+let globalMap = null;
+let globalMarkerGroup = null;
+let activeMapThemeLayer = null;
+let matchTypeChartInstance = null;
+let confidenceChartInstance = null;
+
+const mapTileProviders = {
+  light: L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }),
+  dark: L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  }),
+  satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community",
+  })
+};
+
+// Functions
 
 function normalizeHeader(value) {
   return String(value || "")
@@ -205,6 +244,7 @@ function applyManualMapping(field, column) {
   state.health = healthCheck(state.rows, state.mapping);
   els.runButton.disabled = !state.mapping.scientificName && !state.mapping.genus;
   renderMapping();
+  updateDashboardHealthLog();
 }
 
 function detectSchema(mapping) {
@@ -311,31 +351,29 @@ function renderMapping() {
 
   if (!fields.length) {
     els.detectSummary.innerHTML = `
-      <div>
-        <span class="summary-kicker">Waiting for file</span>
-        <strong>Upload or load the demo to inspect columns.</strong>
+      <div class="detect-text">
+        <strong>Pending Upload</strong>
+        <small>Upload a file to detect column structure.</small>
       </div>
-      <span class="summary-status">Idle</span>
     `;
   } else {
     els.detectSummary.innerHTML = `
-      <div>
-        <span class="summary-kicker">${escapeHtml(schema)} detected</span>
-        <strong>${state.rows.length} rows ready for GBIF matching.</strong>
+      <div class="detect-text">
+        <strong>${escapeHtml(schema)} detected</strong>
+        <small>${state.rows.length} rows ready for matching.</small>
       </div>
-      <span class="summary-status ${hasName ? "ready" : "warning"}">
-        ${hasName ? "Ready to match" : "Needs name column"}
-      </span>
     `;
   }
 
   if (!fields.length) {
-    els.mappingList.innerHTML = '<p class="empty">Upload a file to detect columns and taxonomy structure.</p>';
+    els.mappingList.innerHTML = '<p class="empty-mapping">Upload a file to detect columns and taxonomy structure.</p>';
   } else {
     els.mappingList.innerHTML = editableFields
       .map(
         (field) => {
           const info = state.mapping[field] || {};
+          const isSelected = info.column ? "Manual" : "Unset";
+          const confClass = info.confidence ? info.confidence.toLowerCase() : "unset";
           return `
           <div class="mapping-row">
             <strong>${fieldLabel(field)}</strong>
@@ -348,7 +386,7 @@ function renderMapping() {
                 )
                 .join("")}
             </select>
-            <span class="confidence">${info.confidence || "Unset"}</span>
+            <span class="confidence-tag ${confClass}">${info.confidence || "Unset"}</span>
           </div>
         `;
         },
@@ -361,8 +399,10 @@ function renderMapping() {
   });
 
   els.healthList.innerHTML = state.health
-    .map((item) => `<div class="health-item">${escapeHtml(item)}</div>`)
+    .map((item) => `<div class="health-item"><i data-lucide="alert-triangle"></i> ${escapeHtml(item)}</div>`)
     .join("");
+    
+  lucide.createIcons();
 }
 
 function fieldLabel(field) {
@@ -416,7 +456,7 @@ function saveCache(name, cache) {
   try {
     localStorage.setItem(`${CACHE_PREFIX}.${name}`, JSON.stringify(cache));
   } catch {
-    // If browser storage is full or unavailable, the app still works with in-memory caching.
+    // Fallback for full localstorage
   }
 }
 
@@ -465,8 +505,13 @@ function loadText(text) {
   els.previewStatus.textContent = state.mapping.scientificName ? "Detected" : "Needs mapping";
   els.progressWrap.hidden = true;
   els.progressBar.style.width = "0";
+  
   renderMapping();
   renderResults();
+  updateDashboardKPIs();
+  updateDashboardHealthLog();
+  renderDashboardCharts();
+  renderGlobalMap();
 }
 
 function updateRunButtonLabel() {
@@ -475,7 +520,8 @@ function updateRunButtonLabel() {
     local: "Compare locally",
     both: "Match GBIF + local",
   };
-  els.runButton.textContent = labels[els.matchMode.value] || labels.gbif;
+  els.runButton.innerHTML = `<i data-lucide="play"></i> ` + (labels[els.matchMode.value] || labels.gbif);
+  lucide.createIcons();
 }
 
 function updateProgress(done, total, label = "Matching") {
@@ -583,7 +629,13 @@ async function runMatching() {
     updateProgress(0, rows.length, "Comparing local reference");
     state.results = rows.map((row, index) => formatLocalResult(row, matchLocalReference(row), index + 1));
     updateProgress(rows.length, rows.length, "Comparing local reference");
+    
+    // UI refreshes
     renderResults();
+    updateDashboardKPIs();
+    updateDashboardHealthLog();
+    renderDashboardCharts();
+    renderGlobalMap();
   } else {
     const uniqueMatches = Array.from(
       rows
@@ -599,7 +651,7 @@ async function runMatching() {
     updateProgress(
       0,
       uniqueMatches.length,
-      `Checking ${uniqueMatches.length} unique taxonomy ${uniqueMatches.length === 1 ? "query" : "queries"}`,
+      `Checking ${uniqueMatches.length} unique taxonomy queries`,
     );
 
     await runQueue(
@@ -630,7 +682,12 @@ async function runMatching() {
       if (mode === "both") result.localMatch = matchLocalReference(row);
       return result;
     });
+
     renderResults();
+    updateDashboardKPIs();
+    updateDashboardHealthLog();
+    renderDashboardCharts();
+    renderGlobalMap();
 
     await enrichResults(rows);
   }
@@ -709,7 +766,12 @@ async function enrichResults(rows) {
       locationCheck: result.usageKey ? enrichmentResults.get(`location:${locationKey}`) || result.locationCheck : result.locationCheck,
     };
   });
+
   renderResults();
+  updateDashboardKPIs();
+  updateDashboardHealthLog();
+  renderDashboardCharts();
+  renderGlobalMap();
 }
 
 function baseResult(row, rowNumber) {
@@ -970,13 +1032,39 @@ async function fetchWikidataLinks(gbifId) {
 
 function renderResults() {
   syncLocationColumnHeaders();
-  const rows = state.results.filter(
-    (result) => state.filter === "ALL" || result.matchType === state.filter,
-  );
+  let rows = state.results;
+  
+  // Apply category filters
+  if (state.filter !== "ALL") {
+    rows = rows.filter((result) => result.matchType === state.filter);
+  }
+
+  // Apply search query filter
+  if (state.searchQuery) {
+    const q = state.searchQuery.toLowerCase();
+    rows = rows.filter(
+      (result) => 
+        result.inputName.toLowerCase().includes(q) || 
+        result.matchedName.toLowerCase().includes(q) ||
+        result.family.toLowerCase().includes(q) ||
+        result.kingdom.toLowerCase().includes(q)
+    );
+  }
 
   if (!rows.length) {
     const colspan = els.showLocationColumns.checked ? 17 : 11;
-    els.resultsBody.innerHTML = `<tr><td colspan="${colspan}" class="empty-cell">No matches yet.</td></tr>`;
+    els.resultsBody.innerHTML = `
+      <tr>
+        <td colspan="${colspan}" class="empty-cell">
+          <div class="table-placeholder">
+            <i data-lucide="table-2"></i>
+            <strong>No matching taxonomic results found.</strong>
+            <span>Try clearing your search query or uploading a checklist.</span>
+          </div>
+        </td>
+      </tr>
+    `;
+    lucide.createIcons();
     return;
   }
 
@@ -985,17 +1073,21 @@ function renderResults() {
       (row) => `
         <tr title="${escapeHtml(row.note)}">
           <td>${escapeHtml(row.inputName)}</td>
-          <td>${escapeHtml(row.matchedName || row.acceptedScientificName)}</td>
+          <td>${escapeHtml(row.matchedName || row.acceptedScientificName || "—")}</td>
           <td><span class="tag ${row.matchType}">${escapeHtml(row.matchType)}</span></td>
-          <td>${escapeHtml(row.confidence)}</td>
-          <td>${escapeHtml(row.status)}</td>
-          <td>${escapeHtml(row.rank)}</td>
-          <td>${escapeHtml(row.usageKey)}</td>
+          <td>${escapeHtml(row.confidence || "0")}%</td>
+          <td>${escapeHtml(row.status || "—")}</td>
+          <td>${escapeHtml(row.rank || "—")}</td>
+          <td>${escapeHtml(row.usageKey || "—")}</td>
           <td>${wikidataBadge(row)}</td>
-          <td>${escapeHtml(ncbiIds(row) || "-")}</td>
+          <td>${escapeHtml(ncbiIds(row) || "—")}</td>
           <td>${locationBadge(row)}</td>
           ${locationExtraCells(row)}
-          <td><button class="button secondary mini review-button" data-name="${escapeHtml(row.inputName)}">Details</button></td>
+          <td class="actions-col">
+            <button class="btn btn-outline btn-text review-button" data-name="${escapeHtml(row.inputName)}">
+              <i data-lucide="eye"></i> Details
+            </button>
+          </td>
         </tr>
       `,
     )
@@ -1007,6 +1099,8 @@ function renderResults() {
       if (result) openReviewDrawer(result);
     });
   });
+  
+  lucide.createIcons();
 }
 
 function syncLocationColumnHeaders() {
@@ -1019,20 +1113,23 @@ function locationExtraCells(row) {
   const hidden = els.showLocationColumns.checked ? "" : "hidden";
   const check = row.locationCheck || {};
   return `
-    <td class="location-extra" ${hidden}>${escapeHtml(check.nearestDistanceKm ?? "-")}</td>
-    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[1] ?? "-")}</td>
-    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[5] ?? "-")}</td>
-    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[10] ?? "-")}</td>
-    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[50] ?? "-")}</td>
-    <td class="location-extra" ${hidden}>${escapeHtml(check.mostRecentYear || "-")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.nearestDistanceKm ?? "—")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[1] ?? "—")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[5] ?? "—")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[10] ?? "—")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.counts?.[50] ?? "—")}</td>
+    <td class="location-extra" ${hidden}>${escapeHtml(check.mostRecentYear || "—")}</td>
   `;
 }
 
 function locationBadge(row) {
   if (!els.locationCheck.checked && !row.locationCheck) return '<span class="status-pill muted">Not checked</span>';
   const status = row.locationCheck?.status || "Not checked";
-  const good = status === "High plausibility" || status === "Moderate plausibility";
-  return `<span class="status-pill ${good ? "linked" : "muted"}">${escapeHtml(status)}</span>`;
+  let badgeClass = "plausible-none";
+  if (status === "High plausibility") badgeClass = "plausible-high";
+  if (status === "Moderate plausibility") badgeClass = "plausible-mod";
+  if (status === "Low plausibility") badgeClass = "plausible-low";
+  return `<span class="status-pill ${badgeClass}">${escapeHtml(status)}</span>`;
 }
 
 function ncbiIds(row) {
@@ -1049,32 +1146,43 @@ function wikidataBadge(row) {
 function openReviewDrawer(result) {
   const alternatives = result.alternatives || [];
   const wikidataLinks = result.wikidata?.links || [];
+  
+  // Set Drawer Title
+  document.querySelector("#drawerTaxonName").textContent = result.inputName;
+  
   els.drawerContent.innerHTML = `
-    <h3>${escapeHtml(result.inputName)}</h3>
-    <p class="drawer-muted">${escapeHtml(result.source || "GBIF")} result: ${escapeHtml(result.matchType)} (${escapeHtml(result.confidence)})</p>
+    <p class="drawer-muted">${escapeHtml(result.source || "GBIF")} Match Result: <strong>${escapeHtml(result.matchType)}</strong> (${escapeHtml(result.confidence)}% Confidence)</p>
     <dl class="detail-list">
-      <dt>Matched name</dt><dd>${escapeHtml(result.matchedName || "No match")}</dd>
-      <dt>GBIF/local ID</dt><dd>${escapeHtml(result.usageKey || "None")}</dd>
-      <dt>Accepted name</dt><dd>${escapeHtml(result.acceptedScientificName || "Not supplied")}</dd>
+      <dt>Matched Name</dt><dd>${escapeHtml(result.matchedName || "No Match")}</dd>
+      <dt>GBIF/Local ID</dt><dd>${escapeHtml(result.usageKey || "None")}</dd>
+      <dt>Accepted Name</dt><dd>${escapeHtml(result.acceptedScientificName || "Same / accepted")}</dd>
       <dt>Note</dt><dd>${escapeHtml(result.note || "None")}</dd>
-      <dt>Local reference</dt><dd>${result.localMatch ? `${escapeHtml(result.localMatch.name)} (${result.localMatch.confidence})` : "Not used or no match"}</dd>
-      <dt>Wikidata</dt><dd>${escapeHtml(result.wikidata?.status || "Not checked")}</dd>
-      <dt>Location</dt><dd>${locationSummary(result)}</dd>
+      <dt>Kingdom / Family</dt><dd>${escapeHtml(result.kingdom || "—")} / ${escapeHtml(result.family || "—")}</dd>
+      <dt>Local Reference</dt><dd>${result.localMatch ? `${escapeHtml(result.localMatch.name)} (${result.localMatch.confidence}%)` : "Not checked or no match"}</dd>
+      <dt>Wikidata Link</dt><dd>${escapeHtml(result.wikidata?.status || "Not checked")}</dd>
+      <dt>Location QA</dt><dd>${locationSummary(result)}</dd>
     </dl>
-    <h4>Alternative candidates</h4>
+    
+    <h4>Alternative Matches Suggestions</h4>
     ${alternatives.length ? `<ul class="candidate-list">${alternatives
-      .map((item) => `<li>${escapeHtml(item.scientificName || item.name || "")} ${item.key || item.usageKey ? `<span>${escapeHtml(item.key || item.usageKey)}</span>` : ""}</li>`)
-      .join("")}</ul>` : '<p class="drawer-muted">No alternatives returned.</p>'}
-    <h4>Wikidata identifiers</h4>
+      .map((item) => `<li><strong>${escapeHtml(item.scientificName || item.name || "")}</strong> ${item.key || item.usageKey ? `<span>GBIF ${escapeHtml(item.key || item.usageKey)}</span>` : ""}</li>`)
+      .join("")}</ul>` : '<p class="drawer-muted">No alternative suggestions available.</p>'}
+    
+    <h4>Wikidata External Links</h4>
     ${wikidataLinks.length ? `<ul class="candidate-list">${wikidataLinks
-      .map((item) => `<li><a href="${escapeHtml(item.item)}" target="_blank" rel="noreferrer">${escapeHtml(item.label || item.item)}</a><span>GBIF ${escapeHtml(item.gbif || "-")} / NCBI ${escapeHtml(item.ncbi || "-")}</span></li>`)
-      .join("")}</ul>` : '<p class="drawer-muted">No Wikidata links available.</p>'}
-    <h4>Location plausibility</h4>
+      .map((item) => `<li><a href="${escapeHtml(item.item)}" target="_blank" rel="noreferrer"><i data-lucide="external-link"></i> ${escapeHtml(item.label || item.item)}</a><span>GBIF ${escapeHtml(item.gbif || "—")} / NCBI ${escapeHtml(item.ncbi || "—")}</span></li>`)
+      .join("")}</ul>` : '<p class="drawer-muted">No Wikidata cross-reference matches.</p>'}
+    
+    <h4>Radius Coordinates Verification</h4>
     ${locationSection(result)}
   `;
+  
   els.reviewDrawer.classList.add("open");
   els.reviewDrawer.setAttribute("aria-hidden", "false");
+  
+  // Render submap
   renderLocationMap(result);
+  lucide.createIcons();
 }
 
 function closeReviewDrawer() {
@@ -1091,25 +1199,25 @@ function locationSummary(result) {
 
 function locationSection(result) {
   const check = result.locationCheck;
-  if (!check) return '<p class="drawer-muted">Location check was not enabled.</p>';
+  if (!check) return '<p class="drawer-muted">Geographic checking is currently disabled.</p>';
   if (!check.location) return `<p class="drawer-muted">${escapeHtml(check.status)}</p>`;
   return `
     <p class="drawer-muted">${locationSummary(result)}</p>
     <div class="location-score-grid">
-      <div><strong>${escapeHtml(check.counts?.[1] ?? 0)}</strong><span>within 1 km</span></div>
-      <div><strong>${escapeHtml(check.counts?.[5] ?? 0)}</strong><span>within 5 km</span></div>
-      <div><strong>${escapeHtml(check.counts?.[10] ?? 0)}</strong><span>within 10 km</span></div>
-      <div><strong>${escapeHtml(check.counts?.[50] ?? 0)}</strong><span>within 50 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[1] ?? 0)}</strong><span>1 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[5] ?? 0)}</strong><span>5 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[10] ?? 0)}</strong><span>10 km</span></div>
+      <div><strong>${escapeHtml(check.counts?.[50] ?? 0)}</strong><span>50 km</span></div>
     </div>
     <div id="locationMap" class="location-map"></div>
-    <p class="drawer-muted">Absence of nearby GBIF records is not evidence of absence. GBIF data are presence-only and reflect recording effort, taxonomic coverage, and data quality.</p>
+    <p class="drawer-muted" style="margin-top: 8px; font-size: 11px;">Absence of local coordinates doesn't prove absence. Occurrence checks evaluate public GBIF grids, sampling density, and data flags.</p>
     ${occurrenceTable(check)}
   `;
 }
 
 function occurrenceTable(check) {
   const records = (check.records || []).slice(0, 10);
-  if (!records.length) return '<p class="drawer-muted">No quality-filtered nearby occurrence records to list.</p>';
+  if (!records.length) return '<p class="drawer-muted">No GBIF occurrence grids found nearby.</p>';
   return `
     <div class="occurrence-table">
       <table>
@@ -1119,10 +1227,10 @@ function occurrenceTable(check) {
             .map(
               (record) => `
                 <tr>
-                  <td>${escapeHtml(record.distanceKm.toFixed(1))} km</td>
-                  <td>${escapeHtml(record.year || "-")}</td>
-                  <td>${escapeHtml(record.country || "-")}</td>
-                  <td>${escapeHtml(record.basisOfRecord || "-")}</td>
+                  <td><strong>${escapeHtml(record.distanceKm.toFixed(1))} km</strong></td>
+                  <td>${escapeHtml(record.year || "—")}</td>
+                  <td>${escapeHtml(record.country || "—")}</td>
+                  <td>${escapeHtml(record.basisOfRecord || "—")}</td>
                 </tr>
               `,
             )
@@ -1143,7 +1251,7 @@ function renderLocationMap(result) {
       scrollWheelZoom: true,
     }).setView([check.location.lat, check.location.lon], 8);
     L.control.zoom({ position: "topright" }).addTo(map);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
       maxZoom: 18,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
@@ -1153,19 +1261,19 @@ function renderLocationMap(result) {
       radius: 8,
       color: "#000000",
       weight: 2,
-      fillColor: "#dbfe52",
+      fillColor: "#ff8c00",
       fillOpacity: 0.95,
-    }).bindPopup("Input location");
+    }).bindPopup("Input coordinate location");
     inputMarker.addTo(map);
     layers.push(inputMarker);
 
     (check.radii || [1, 5, 10, 50]).forEach((radiusKm) => {
       const radius = L.circle([check.location.lat, check.location.lon], {
         radius: radiusKm * 1000,
-        color: radiusKm === 50 ? "#000000" : "#90a968",
+        color: radiusKm === 50 ? "#000000" : "#556b2f",
         weight: radiusKm === 50 ? 2 : 1,
-        fillColor: "#dbfe52",
-        fillOpacity: radiusKm === 50 ? 0.08 : 0.03,
+        fillColor: "#556b2f",
+        fillOpacity: radiusKm === 50 ? 0.06 : 0.02,
       }).addTo(map);
       layers.push(radius);
     });
@@ -1178,7 +1286,7 @@ function renderLocationMap(result) {
         fillOpacity: 0.75,
       })
         .addTo(map)
-        .bindPopup(`${escapeHtml(record.name)}<br>${escapeHtml(record.country)} ${escapeHtml(record.year)}`);
+        .bindPopup(`<strong>${escapeHtml(record.name)}</strong><br>${escapeHtml(record.country)} ${escapeHtml(record.year)}`);
       layers.push(marker);
     });
 
@@ -1189,6 +1297,296 @@ function renderLocationMap(result) {
     }
     setTimeout(() => map.invalidateSize(true), 120);
   }, 120);
+}
+
+// Global Map view tab implementation
+function initGlobalMap() {
+  const mapEl = document.querySelector("#globalOccurrencesMap");
+  if (!mapEl || globalMap || !window.L) return;
+  
+  globalMap = L.map(mapEl, {
+    zoomControl: false,
+    scrollWheelZoom: true
+  }).setView([20, 0], 2);
+  
+  L.control.zoom({ position: "topright" }).addTo(globalMap);
+  
+  activeMapThemeLayer = mapTileProviders.light;
+  activeMapThemeLayer.addTo(globalMap);
+  
+  globalMarkerGroup = L.featureGroup().addTo(globalMap);
+  
+  // Wire theme changer
+  els.mapLayerSelect.addEventListener("change", (e) => {
+    const val = e.target.value;
+    if (globalMap && mapTileProviders[val]) {
+      globalMap.removeLayer(activeMapThemeLayer);
+      activeMapThemeLayer = mapTileProviders[val];
+      activeMapThemeLayer.addTo(globalMap);
+    }
+  });
+  
+  els.mapResetViewBtn.addEventListener("click", () => {
+    if (globalMap && globalMarkerGroup) {
+      const bounds = globalMarkerGroup.getBounds();
+      if (bounds.isValid()) {
+        globalMap.fitBounds(bounds, { padding: [40, 40] });
+      } else {
+        globalMap.setView([20, 0], 2);
+      }
+    }
+  });
+}
+
+function renderGlobalMap() {
+  if (!globalMap || !globalMarkerGroup) return;
+  
+  globalMarkerGroup.clearLayers();
+  
+  if (!state.results.length) {
+    els.mapPlotCounter.textContent = "0 occurrences mapped";
+    return;
+  }
+  
+  const coordinateRows = state.results.filter(
+    (row) => locationForRow(row.originalValues) !== null
+  );
+  
+  els.mapPlotCounter.textContent = `${coordinateRows.length} ${coordinateRows.length === 1 ? "occurrence" : "occurrences"} mapped`;
+  
+  const colors = {
+    EXACT: "#2e7d32",
+    FUZZY: "#f57c00",
+    HIGHERRANK: "#1565c0",
+    AGGREGATE: "#1565c0",
+    NONE: "#d32f2f"
+  };
+  
+  const layers = [];
+  
+  coordinateRows.forEach((row) => {
+    const coords = locationForRow(row.originalValues);
+    if (!coords) return;
+    
+    const color = colors[row.matchType] || "#9e9e9e";
+    
+    // 1. Plot Input Coordinate Marker
+    const marker = L.circleMarker([coords.lat, coords.lon], {
+      radius: 7,
+      color: "#000",
+      weight: 1.5,
+      fillColor: color,
+      fillOpacity: 0.9
+    });
+    
+    const popupContent = `
+      <div style="font-family: sans-serif; line-height: 1.4;">
+        <span style="font-size:10px; color:#666; text-transform:uppercase; font-weight:800;">Input Row ${row.inputRow}</span>
+        <h4 style="margin: 4px 0; font-size:14px; font-weight:800;">${escapeHtml(row.inputName)}</h4>
+        <dl style="margin: 6px 0; display:grid; grid-template-columns: 80px 1fr; gap:2px; font-size:12px;">
+          <dt style="color:#666;">Match:</dt><dd><strong>${escapeHtml(row.matchedName || "Unmatched")}</strong></dd>
+          <dt style="color:#666;">Type:</dt><dd><span style="padding: 1px 6px; border-radius:10px; background:#eee; font-size:10px; font-weight:bold;">${row.matchType}</span></dd>
+          <dt style="color:#666;">Confidence:</dt><dd>${row.confidence}%</dd>
+          <dt style="color:#666;">Plausibility:</dt><dd>${row.locationCheck?.status || "Not checked"}</dd>
+        </dl>
+        <button class="btn btn-primary btn-outline" style="min-height: 24px; padding: 2px 8px; font-size: 11px; width: 100%; margin-top: 6px;" onclick="openReviewDrawerByName('${escapeHtml(row.inputName)}')">
+          Inspect Details Drawer
+        </button>
+      </div>
+    `;
+    
+    marker.bindPopup(popupContent);
+    marker.addTo(globalMarkerGroup);
+    layers.push(marker);
+    
+    // 2. Draw Connection to nearest occurrence if available
+    const nearestRecord = row.locationCheck?.records?.[0];
+    if (nearestRecord) {
+      const nearestMarker = L.circleMarker([nearestRecord.lat, nearestRecord.lon], {
+        radius: 4,
+        color: "#477ae2",
+        weight: 1,
+        fillColor: "#477ae2",
+        fillOpacity: 0.7
+      }).bindPopup(`<strong>Nearest occurrence</strong><br>${escapeHtml(nearestRecord.name)}<br>${nearestRecord.country} (${nearestRecord.year})`);
+      
+      nearestMarker.addTo(globalMarkerGroup);
+      layers.push(nearestMarker);
+      
+      const line = L.polyline([[coords.lat, coords.lon], [nearestRecord.lat, nearestRecord.lon]], {
+        color: "#777",
+        weight: 1.5,
+        dashArray: "4, 6"
+      }).bindPopup(`Taxonomic Distance: ${nearestRecord.distanceKm.toFixed(2)} km`);
+      
+      line.addTo(globalMarkerGroup);
+    }
+  });
+  
+  if (layers.length > 0) {
+    const bounds = globalMarkerGroup.getBounds();
+    if (bounds.isValid()) {
+      globalMap.fitBounds(bounds, { padding: [40, 40] });
+    }
+  }
+}
+
+// Window scope function for popup triggers
+window.openReviewDrawerByName = function(name) {
+  const result = state.results.find((item) => item.inputName === name);
+  if (result) openReviewDrawer(result);
+};
+
+// Dashboard KPI metrics updates
+function updateDashboardKPIs() {
+  if (!state.results.length) {
+    els.dashKpiTotal.textContent = "0";
+    els.dashKpiMatchRate.textContent = "0%";
+    els.dashKpiSpatial.textContent = "0";
+    els.dashKpiWikidata.textContent = "0";
+    return;
+  }
+  
+  const total = state.results.length;
+  const matches = state.results.filter((r) => r.matchType !== "NONE").length;
+  const matchRate = total ? Math.round((matches / total) * 100) : 0;
+  
+  const spatial = state.results.filter(
+    (row) => locationForRow(row.originalValues) !== null
+  ).length;
+  
+  const wikidata = state.results.filter((r) => r.wikidata?.status === "Linked").length;
+  
+  els.dashKpiTotal.textContent = total;
+  els.dashKpiMatchRate.textContent = `${matchRate}%`;
+  els.dashKpiSpatial.textContent = spatial;
+  els.dashKpiWikidata.textContent = wikidata;
+}
+
+// Diagnostic Health Log
+function updateDashboardHealthLog() {
+  const logEl = els.dashboardHealthLog;
+  if (!state.rows.length) {
+    logEl.innerHTML = `
+      <div class="health-placeholder">
+        <i data-lucide="check-circle-2" class="text-success"></i>
+        <span>No checklist uploaded yet. Load a spreadsheet to trigger diagnostic checks.</span>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+  
+  if (!state.health.length) {
+    logEl.innerHTML = `
+      <div class="health-log-item success">
+        <i data-lucide="check-circle-2" style="color:#2e7d32; flex-shrink:0;"></i>
+        <div><strong>All systems operational</strong> — 0 taxonomic quality flags raised against column structure. Ready to match.</div>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+  
+  logEl.innerHTML = state.health
+    .map(
+      (err) => `
+        <div class="health-log-item warning">
+          <i data-lucide="alert-triangle" style="color:#f57c00; flex-shrink:0;"></i>
+          <div><strong>Verification Alert</strong> — ${escapeHtml(err)}</div>
+        </div>
+      `
+    )
+    .join("");
+  
+  lucide.createIcons();
+}
+
+// ChartJS dashboard visualizer
+function renderDashboardCharts() {
+  const ctxType = document.getElementById("matchTypeChart");
+  const ctxConf = document.getElementById("confidenceChart");
+  
+  if (!ctxType || !ctxConf) return;
+  
+  // Reset previous instances
+  if (matchTypeChartInstance) matchTypeChartInstance.destroy();
+  if (confidenceChartInstance) confidenceChartInstance.destroy();
+  
+  if (!state.results.length) {
+    return;
+  }
+  
+  // 1. Match type distribution doughnut
+  const types = { EXACT: 0, FUZZY: 0, HIGHERRANK: 0, NONE: 0 };
+  state.results.forEach((row) => {
+    let t = row.matchType;
+    if (t === "AGGREGATE") t = "HIGHERRANK";
+    if (types[t] !== undefined) types[t]++;
+  });
+  
+  matchTypeChartInstance = new Chart(ctxType, {
+    type: "doughnut",
+    data: {
+      labels: ["Exact Match", "Fuzzy Match", "Higher Rank", "No Match"],
+      datasets: [{
+        data: [types.EXACT, types.FUZZY, types.HIGHERRANK, types.NONE],
+        backgroundColor: ["#2e7d32", "#f57c00", "#1565c0", "#d32f2f"],
+        borderWidth: 2,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: { boxWidth: 12, font: { family: "Inter", weight: 600 } }
+        }
+      }
+    }
+  });
+  
+  // 2. Confidence groups bar chart
+  const confs = { "90-100%": 0, "70-89%": 0, "50-69%": 0, "<50%": 0, "No Match": 0 };
+  state.results.forEach((row) => {
+    if (row.matchType === "NONE") {
+      confs["No Match"]++;
+      return;
+    }
+    const c = Number(row.confidence);
+    if (c >= 90) confs["90-100%"]++;
+    else if (c >= 70) confs["70-89%"]++;
+    else if (c >= 50) confs["50-69%"]++;
+    else confs["<50%"]++;
+  });
+  
+  confidenceChartInstance = new Chart(ctxConf, {
+    type: "bar",
+    data: {
+      labels: Object.keys(confs),
+      datasets: [{
+        label: "Taxa Checked",
+        data: Object.values(confs),
+        backgroundColor: ["#2e7d32", "#a5d6a7", "#ffe082", "#ffb74d", "#ef9a9a"],
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 }
+        }
+      }
+    }
+  });
 }
 
 function downloadCsv() {
@@ -1359,6 +1757,8 @@ function downloadOccurrenceCsv() {
   downloadRows("gbif-taxonlens-location-occurrences.csv", headers, rows);
 }
 
+// Bind UI event listeners
+
 els.fileInput.addEventListener("change", (event) => {
   const file = event.target.files?.[0];
   if (file) handleFile(file);
@@ -1396,14 +1796,23 @@ els.downloadOccurrencesButton.addEventListener("click", downloadOccurrenceCsv);
 els.showLocationColumns.addEventListener("change", renderResults);
 els.matchMode.addEventListener("change", updateRunButtonLabel);
 els.drawerClose.addEventListener("click", closeReviewDrawer);
+
 els.reviewDrawer.addEventListener("click", (event) => {
   if (event.target === els.reviewDrawer) closeReviewDrawer();
 });
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && els.reviewDrawer.classList.contains("open")) {
     closeReviewDrawer();
   }
 });
+
+// Search input keyup query listener
+els.tableSearchQuery.addEventListener("input", (e) => {
+  state.searchQuery = e.target.value;
+  renderResults();
+});
+
 els.clearButton.addEventListener("click", () => {
   state.rows = [];
   state.headers = [];
@@ -1411,6 +1820,8 @@ els.clearButton.addEventListener("click", () => {
   state.health = [];
   state.results = [];
   state.reference = { rows: [], headers: [], mapping: {}, source: "" };
+  state.searchQuery = "";
+  els.tableSearchQuery.value = "";
   els.fileInput.value = "";
   els.referenceInput.value = "";
   els.runButton.disabled = true;
@@ -1423,12 +1834,18 @@ els.clearButton.addEventListener("click", () => {
   els.progressBar.style.width = "0";
   els.referenceStatus.textContent =
     "Optional: upload a pinned GBIF Backbone extract, curated checklist, or second taxonomy table.";
+  
   renderMapping();
   renderResults();
+  updateDashboardKPIs();
+  updateDashboardHealthLog();
+  renderDashboardCharts();
+  renderGlobalMap();
 });
 
 updateRunButtonLabel();
 
+// Table filters
 document.querySelectorAll(".chip").forEach((chip) => {
   chip.addEventListener("click", () => {
     document.querySelectorAll(".chip").forEach((item) => item.classList.remove("active"));
@@ -1437,3 +1854,45 @@ document.querySelectorAll(".chip").forEach((chip) => {
     renderResults();
   });
 });
+
+// Tab Switches Event listener
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => {
+      b.classList.remove("active");
+      b.setAttribute("aria-selected", "false");
+    });
+    document.querySelectorAll(".tab-pane").forEach((pane) => {
+      pane.classList.remove("active");
+    });
+    
+    btn.classList.add("active");
+    btn.setAttribute("aria-selected", "true");
+    
+    const targetPaneId = "pane" + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1);
+    const targetPane = document.getElementById(targetPaneId);
+    if (targetPane) {
+      targetPane.classList.add("active");
+    }
+    
+    // Actions upon tab activation
+    if (btn.dataset.tab === "map") {
+      initGlobalMap();
+      setTimeout(() => {
+        if (globalMap) {
+          globalMap.invalidateSize(true);
+          // Auto fit bounds
+          if (globalMarkerGroup) {
+            const bounds = globalMarkerGroup.getBounds();
+            if (bounds.isValid()) {
+              globalMap.fitBounds(bounds, { padding: [40, 40] });
+            }
+          }
+        }
+      }, 100);
+    }
+  });
+});
+
+// Run Init
+lucide.createIcons();
