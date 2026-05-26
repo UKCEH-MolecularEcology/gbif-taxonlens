@@ -3,303 +3,553 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GBIF TaxonLens</title>
+    <title>GBIF TaxonLens — Taxonomic Quality Assurance Dashboard</title>
+    <!-- Premium Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Leaflet.js Mapping CSS -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIINfQy1q8v7Xc+5qGqsO/MiqM6y6GZb9rU="
-      crossorigin=""
     />
+    <!-- Custom Style System -->
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-container">
+      <!-- Premium Glassmorphic Navigation Topbar -->
       <header class="topbar">
         <a class="brand" href="#top" aria-label="GBIF TaxonLens home">
           <img
             class="brand-logo"
             src="assets/ukceh/ukceh-logo-black.png"
-            alt="UKCEH"
+            alt="UKCEH Logo"
           />
-          <span>
-            <strong>GBIF TaxonLens</strong>
-            <small>Taxonomy matching and checklist QA</small>
-          </span>
+          <div class="brand-divider"></div>
+          <div class="brand-meta">
+            <span class="brand-title">GBIF TaxonLens</span>
+            <span class="brand-tagline">Taxonomic Matching & Checklist QA</span>
+          </div>
         </a>
         <nav class="topnav" aria-label="Primary navigation">
-          <a href="#workspace">Workspace</a>
-          <a href="#schema">Schema</a>
-          <a href="#notebook">Notebook</a>
+          <a href="#workspace" class="nav-link active"><i data-lucide="layers"></i> Workspace</a>
+          <a
+            href="https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb"
+            target="_blank"
+            rel="noreferrer"
+            class="nav-link colab-link"
+          >
+            <i data-lucide="external-link"></i> Open in Colab
+          </a>
+          <a href="#notebook" class="nav-link"><i data-lucide="terminal"></i> CLI Workflow</a>
         </nav>
       </header>
 
-      <main id="top">
-        <section class="hero">
-          <div class="hero-copy">
-            <h1>Inspect taxonomy against GBIF with confidence.</h1>
+      <main id="top" class="main-content">
+        <!-- Interactive Hero Panel with beautiful typography and quick actions -->
+        <section class="hero-section">
+          <div class="hero-content">
+            <span class="hero-badge">Biodiversity Data Validation</span>
+            <h1>Inspect taxonomy against GBIF with absolute confidence.</h1>
             <p>
-              Upload a checklist, detect its taxonomy shape, match names against
-              the GBIF Backbone, and export a transparent review table for exact,
-              fuzzy, higher-rank, synonym, and unresolved matches.
+              Upload checklists, ASV tables, or DADA2 datasets locally. Seamlessly match names against the GBIF Backbone Taxonomy, verify geographic coordinate plausibility, and download comprehensive audit records.
             </p>
             <div class="hero-actions">
-              <a class="button primary" href="#workspace">Start matching</a>
+              <a class="btn btn-primary" href="#workspace">
+                <i data-lucide="sparkles"></i> Get Started
+              </a>
               <a
-                class="button ghost"
+                class="btn btn-outline"
                 href="https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb"
                 target="_blank"
                 rel="noreferrer"
-              >Use in Colab</a>
+              >
+                <i data-lucide="play-circle"></i> Google Colab
+              </a>
             </div>
           </div>
-          <div class="hero-panel" aria-label="Match summary preview">
-            <div class="preview-brand">GBIF TaxonLens</div>
-            <div class="panel-head">
-              <span>Run preview</span>
-              <strong id="previewStatus">Ready</strong>
+          <!-- Hero visual KPI preview panel -->
+          <div class="hero-kpi-card" aria-label="Match summary preview">
+            <div class="kpi-card-header">
+              <div class="kpi-tag"><i data-lucide="activity"></i> Run Preview</div>
+              <strong class="kpi-status-badge" id="previewStatus">Ready</strong>
             </div>
-            <div class="metric-grid">
-              <div><strong id="metricRows">0</strong><span>Rows</span></div>
-              <div><strong id="metricMapped">0</strong><span>Mapped fields</span></div>
-              <div><strong id="metricIssues">0</strong><span>Health flags</span></div>
+            <div class="kpi-metrics-grid">
+              <div class="metric-item">
+                <span class="metric-val" id="metricRows">0</span>
+                <span class="metric-lbl">Total Rows</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-val" id="metricMapped">0</span>
+                <span class="metric-lbl">Mapped Columns</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-val text-warning" id="metricIssues">0</span>
+                <span class="metric-lbl">QA Flags</span>
+              </div>
             </div>
-            <div class="match-bars" aria-hidden="true">
-              <span class="bar exact"></span>
-              <span class="bar fuzzy"></span>
-              <span class="bar higher"></span>
-              <span class="bar none"></span>
+            <div class="progress-bar-stack" aria-hidden="true">
+              <span class="pbar exact" style="width: 45%" title="Exact matches"></span>
+              <span class="pbar fuzzy" style="width: 25%" title="Fuzzy matches"></span>
+              <span class="pbar higher" style="width: 15%" title="Higher rank"></span>
+              <span class="pbar none" style="width: 15%" title="No match"></span>
+            </div>
+            <div class="pbar-legend">
+              <span><span class="dot exact"></span>Exact</span>
+              <span><span class="dot fuzzy"></span>Fuzzy</span>
+              <span><span class="dot higher"></span>Higher</span>
+              <span><span class="dot none"></span>None</span>
             </div>
           </div>
         </section>
 
-        <section class="workspace" id="workspace">
-          <div class="section-head">
-            <h2>Workspace</h2>
-            <p>Files stay in your browser. GBIF receives only the fields needed for matching.</p>
-          </div>
+        <!-- Main Dashboard Workspace -->
+        <section class="workspace-section" id="workspace">
+          <div class="workspace-layout">
+            
+            <!-- Left Sidebar Controls Section -->
+            <aside class="workspace-sidebar">
+              <div class="sidebar-sticky-wrapper">
+                <!-- Compact Upload & Demo Card -->
+                <div class="upload-card">
+                  <label class="drop-zone compact" for="fileInput" id="dropZone">
+                    <input id="fileInput" type="file" accept=".csv,.tsv,.txt" />
+                    <div class="drop-icon-container compact">
+                      <i data-lucide="upload-cloud"></i>
+                    </div>
+                    <div class="drop-copy">
+                      <strong>Upload Custom Checklist</strong>
+                      <span class="drop-subcopy">Drag & drop or click to browse</span>
+                    </div>
+                  </label>
+                  
+                  <div class="demo-prompt">
+                    <span>Need test data?</span>
+                    <button class="btn btn-outline btn-mini" id="demoButton">
+                      <i data-lucide="database"></i> Load Demo Checklist
+                    </button>
+                  </div>
+                </div>
 
-          <div class="tool-grid">
-            <section class="upload-panel">
-              <label class="drop-zone" for="fileInput" id="dropZone">
-                <input id="fileInput" type="file" accept=".csv,.tsv,.txt" />
-                <span class="drop-icon">+</span>
-                <span class="drop-copy">
-                  <strong>Drop taxonomy file</strong>
-                  <small>CSV or TSV checklists, DADA2 taxonomy tables, and ASV exports.</small>
-                </span>
-              </label>
-              <div class="control-card">
-                <div class="control-card-title">
-                  <span>Matching setup</span>
+                <!-- Execution Action buttons - Placed right below upload for high visibility -->
+                <div class="action-buttons-group">
+                  <button class="btn btn-primary btn-large full-width" id="runButton" disabled>
+                    <i data-lucide="play"></i> Match with GBIF
+                  </button>
                 </div>
-                <div class="controls">
-                  <label>
-                    Match mode
-                    <select id="matchMode">
-                      <option value="gbif">GBIF live API</option>
-                      <option value="local">Local reference only</option>
-                      <option value="both">GBIF + local reference</option>
-                    </select>
-                  </label>
-                  <label>
-                    Default kingdom
-                    <select id="defaultKingdom">
-                      <option value="">Auto / not supplied</option>
-                      <option>Animalia</option>
-                      <option>Plantae</option>
-                      <option>Fungi</option>
-                      <option>Chromista</option>
-                      <option>Bacteria</option>
-                      <option>Archaea</option>
-                      <option>Protozoa</option>
-                      <option>Viruses</option>
-                    </select>
-                  </label>
-                  <label>
-                    Max rows
-                    <input id="maxRows" type="number" min="1" value="250" />
-                  </label>
+
+                <!-- Matching progress status card -->
+                <div class="progress-wrap" id="progressWrap" hidden>
+                  <div class="progress-meta">
+                    <span id="progressLabel">Initializing</span>
+                    <strong id="progressCount">0%</strong>
+                  </div>
+                  <div class="progress-track">
+                    <span id="progressBar"></span>
+                  </div>
+                </div>
+
+                <!-- Taxonomy Fields Auto-detection & Manual mapping panel (Elevated in priority!) -->
+                <div class="control-panel mapping-card">
+                  <div class="panel-header header-inline">
+                    <h3><i data-lucide="binary"></i> Schema Mapping</h3>
+                    <span class="badge" id="schemaBadge">No File</span>
+                  </div>
+                  
+                  <div class="detect-summary" id="detectSummary">
+                    <div class="detect-text">
+                      <strong>Pending Upload</strong>
+                      <small>Upload a file to view columns.</small>
+                    </div>
+                  </div>
+
+                  <div class="mapping-table-header" id="mappingHead" hidden>
+                    <span>Field</span>
+                    <span>File Column</span>
+                    <span>Confidence</span>
+                  </div>
+
+                  <div id="mappingList" class="mapping-list">
+                    <p class="empty-mapping">Waiting for file upload...</p>
+                  </div>
+
+                  <div class="health-list" id="healthList"></div>
+                </div>
+
+                <!-- Configurations & Checks panel (Merged and collapsed at the bottom) -->
+                <div class="control-panel">
+                  <div class="panel-header">
+                    <h3><i data-lucide="settings"></i> Configurations & Checks</h3>
+                  </div>
+                  <div class="controls-grid">
+                    <div class="form-group full-width">
+                      <label for="matchMode">Match Mode</label>
+                      <select id="matchMode">
+                        <option value="gbif">GBIF live API</option>
+                        <option value="local">Local reference checklist</option>
+                        <option value="both">GBIF + Local reference</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="defaultKingdom">Default Kingdom</label>
+                      <select id="defaultKingdom">
+                        <option value="">Auto-detect</option>
+                        <option>Animalia</option>
+                        <option>Plantae</option>
+                        <option>Fungi</option>
+                        <option>Chromista</option>
+                        <option>Bacteria</option>
+                        <option>Archaea</option>
+                        <option>Protozoa</option>
+                        <option>Viruses</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="maxRows">Limit Rows</label>
+                      <input id="maxRows" type="number" min="1" value="250" />
+                    </div>
+                  </div>
+
+                  <div class="reference-upload-group">
+                    <label for="referenceInput" class="ref-label">Local Reference Checklist</label>
+                    <div class="ref-input-wrapper">
+                      <input id="referenceInput" type="file" accept=".csv,.tsv,.txt" />
+                      <div class="ref-file-info" id="referenceStatus">
+                        <i data-lucide="info"></i> Upload local reference checklist for comparison.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="optional-checks">
+                    <label class="check-control">
+                      <input id="wikidataCheck" type="checkbox" />
+                      <span class="custom-checkbox"></span>
+                      <span class="check-label">
+                        <strong>Wikidata Cross-Checking</strong>
+                        <small>Lookup linked NCBI & Wikidata taxon IDs</small>
+                      </span>
+                    </label>
+
+                    <label class="check-control">
+                      <input id="locationCheck" type="checkbox" />
+                      <span class="custom-checkbox"></span>
+                      <span class="check-label">
+                        <strong>Location Plausibility</strong>
+                        <small>Verify coordinates against GBIF occurrences</small>
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
-              <div class="control-card">
-                <div class="control-card-title">
-                  <span>Optional checks</span>
+            </aside>
+
+            <!-- Right Main Content Panels Section -->
+            <section class="workspace-main">
+              
+              <!-- Tab Navigation System -->
+              <nav class="dashboard-tabs" role="tablist" aria-label="Dashboard views">
+                <button class="tab-btn active" id="tabBtnDashboard" data-tab="dashboard" role="tab" aria-selected="true">
+                  <i data-lucide="bar-chart-3"></i> Overview & Charts
+                </button>
+                <button class="tab-btn" id="tabBtnMap" data-tab="map" role="tab" aria-selected="false">
+                  <i data-lucide="map"></i> Global Map View
+                </button>
+                <button class="tab-btn" id="tabBtnTable" data-tab="table" role="tab" aria-selected="false">
+                  <i data-lucide="table"></i> Review Data Grid
+                </button>
+              </nav>
+
+              <!-- Dynamic Content Panes wrapper -->
+              <div class="tab-content-container">
+                
+                <!-- Pane 1: Dashboard and Analytics -->
+                <div class="tab-pane active" id="paneDashboard" role="tabpanel">
+                  <div class="dashboard-grid">
+                    
+                    <div class="analytic-card full-width">
+                      <div class="card-title"><h3><i data-lucide="sparkles"></i> Taxonomic Validation Summary</h3></div>
+                      <div class="metric-kpi-row">
+                        <div class="kpi-metric-box">
+                          <strong id="dashKpiTotal">0</strong>
+                          <span>Total Uploaded</span>
+                        </div>
+                        <div class="kpi-metric-box">
+                          <strong id="dashKpiMatchRate">0%</strong>
+                          <span>Total Match Rate</span>
+                        </div>
+                        <div class="kpi-metric-box">
+                          <strong id="dashKpiSpatial">0</strong>
+                          <span>With Coordinates</span>
+                        </div>
+                        <div class="kpi-metric-box">
+                          <strong id="dashKpiWikidata">0</strong>
+                          <span>Wikidata Verified</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="analytic-card">
+                      <div class="card-title"><h3><i data-lucide="pie-chart"></i> Match Type Breakdown</h3></div>
+                      <div class="chart-container">
+                        <canvas id="matchTypeChart"></canvas>
+                      </div>
+                    </div>
+
+                    <div class="analytic-card">
+                      <div class="card-title"><h3><i data-lucide="bar-chart-2"></i> Taxonomy Match Confidence</h3></div>
+                      <div class="chart-container">
+                        <canvas id="confidenceChart"></canvas>
+                      </div>
+                    </div>
+
+                    <div class="analytic-card full-width">
+                      <div class="card-title"><h3><i data-lucide="heart-pulse"></i> Data Health Log</h3></div>
+                      <div class="health-log-wrapper" id="dashboardHealthLog">
+                        <div class="health-placeholder">
+                          <i data-lucide="check-circle-2" class="text-success"></i>
+                          <span>No file uploaded yet. Upload a taxonomy sheet to trigger diagnostic checks.</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
-                <label class="reference-loader" for="referenceInput">
-                  <span class="reference-label">Local reference checklist</span>
-                  <input id="referenceInput" type="file" accept=".csv,.tsv,.txt" />
-                  <span id="referenceStatus">Upload a pinned Backbone extract, curated checklist, or second taxonomy table.</span>
-                </label>
-                <label class="check-row">
-                  <input id="wikidataCheck" type="checkbox" />
-                  <span>
-                    <strong>Wikidata identifier check</strong>
-                    <small>Look for linked GBIF and NCBI taxonomy identifiers after matching.</small>
-                  </span>
-                </label>
-                <label class="check-row">
-                  <input id="locationCheck" type="checkbox" />
-                  <span>
-                    <strong>Location plausibility check</strong>
-                    <small>If latitude and longitude are present, look for nearby GBIF occurrences and show them on a map.</small>
-                  </span>
-                </label>
-              </div>
-              <div class="action-stack">
-                <button class="button primary full" id="runButton" disabled>Match with GBIF</button>
-                <button class="button secondary full" id="demoButton">Load demo file</button>
-              </div>
-              <div class="progress-wrap" id="progressWrap" hidden>
-                <div class="progress-meta">
-                  <span id="progressLabel">Preparing</span>
-                  <strong id="progressCount">0%</strong>
+
+                <!-- Pane 2: Edge-to-Edge Spatial Map Dashboard -->
+                <div class="tab-pane" id="paneMap" role="tabpanel">
+                  <div class="global-map-wrapper">
+                    <!-- Map Toolbar HUD overlay -->
+                    <div class="map-hud-toolbar">
+                      <div class="hud-group">
+                        <span class="hud-title"><i data-lucide="map-pin"></i> Coordinate Plotter</span>
+                        <span class="hud-counter" id="mapPlotCounter">0 occurrences mapped</span>
+                      </div>
+                      
+                      <div class="hud-divider"></div>
+                      
+                      <!-- Map style layers switcher -->
+                      <div class="hud-group">
+                        <label for="mapLayerSelect" class="hud-label">Theme</label>
+                        <select id="mapLayerSelect" class="hud-select">
+                          <option value="light">Carto Light Voyager</option>
+                          <option value="dark">Carto Dark Matter</option>
+                          <option value="satellite">Esri Satellite</option>
+                        </select>
+                      </div>
+
+                      <div class="hud-divider"></div>
+
+                      <button class="hud-btn" id="mapResetViewBtn" title="Reset zoom and bounds">
+                        <i data-lucide="maximize"></i> Zoom Fit
+                      </button>
+                    </div>
+                    
+                    <!-- Core Leaflet Container -->
+                    <div id="globalOccurrencesMap" class="primary-global-map"></div>
+
+                    <!-- Map Legend HUD -->
+                    <div class="map-hud-legend">
+                      <h4>Match Status</h4>
+                      <div class="legend-items">
+                        <span><span class="legend-dot exact"></span>Exact match</span>
+                        <span><span class="legend-dot fuzzy"></span>Fuzzy match</span>
+                        <span><span class="legend-dot higher"></span>Higher rank</span>
+                        <span><span class="legend-dot none"></span>No match</span>
+                        <span><span class="legend-dot occurrence"></span>GBIF occurrence</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="progress-track">
-                  <span id="progressBar"></span>
+
+                <!-- Pane 3: Review Data Grid Table -->
+                <div class="tab-pane" id="paneTable" role="tabpanel">
+                  <div class="table-results-wrapper">
+                    
+                    <!-- Table Actions Toolbar -->
+                    <div class="table-toolbar">
+                      <div class="search-input-group">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" id="tableSearchQuery" placeholder="Search input names or GBIF matches..." />
+                      </div>
+                      
+                      <div class="results-actions">
+                        <button class="btn btn-outline" id="downloadButton" disabled>
+                          <i data-lucide="download"></i> Download CSV
+                        </button>
+                        <button class="btn btn-outline" id="downloadLocationButton" disabled>
+                          <i data-lucide="map-pinned"></i> Location CSV
+                        </button>
+                        <button class="btn btn-outline" id="downloadOccurrencesButton" disabled>
+                          <i data-lucide="globe"></i> Occurrences CSV
+                        </button>
+                        <button class="btn btn-text" id="clearButton" disabled>
+                          <i data-lucide="trash-2"></i> Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Filter pills and options -->
+                    <div class="filter-toolbar">
+                      <div class="filter-pills" role="group" aria-label="Result filters">
+                        <button class="chip active" data-filter="ALL"><i data-lucide="filter"></i> All Results</button>
+                        <button class="chip" data-filter="EXACT"><span class="dot exact"></span> Exact</button>
+                        <button class="chip" data-filter="FUZZY"><span class="dot fuzzy"></span> Fuzzy</button>
+                        <button class="chip" data-filter="HIGHERRANK"><span class="dot higher"></span> Higher Rank</button>
+                        <button class="chip" data-filter="NONE"><span class="dot none"></span> None</button>
+                      </div>
+                      
+                      <label class="toggle-control">
+                        <input id="showLocationColumns" type="checkbox" />
+                        <span class="toggle-slider"></span>
+                        <span class="toggle-label">Show Location Verification Columns</span>
+                      </label>
+                    </div>
+
+                    <!-- Interactive Data Grid -->
+                    <div class="table-shell">
+                      <table class="dashboard-table">
+                        <thead>
+                          <tr>
+                            <th>Input Name</th>
+                            <th>Matched GBIF Name</th>
+                            <th>Type</th>
+                            <th>Confidence</th>
+                            <th>Status</th>
+                            <th>Rank</th>
+                            <th>GBIF Key</th>
+                            <th>Wikidata</th>
+                            <th>NCBI IDs</th>
+                            <th>Location Status</th>
+                            <th class="location-extra" hidden>Nearest Record (km)</th>
+                            <th class="location-extra" hidden>Count (1km)</th>
+                            <th class="location-extra" hidden>Count (5km)</th>
+                            <th class="location-extra" hidden>Count (10km)</th>
+                            <th class="location-extra" hidden>Count (50km)</th>
+                            <th class="location-extra" hidden>Latest Occurrence</th>
+                            <th class="actions-col">Review</th>
+                          </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                          <tr>
+                            <td colspan="11" class="empty-cell">
+                              <div class="table-placeholder">
+                                <i data-lucide="table-2"></i>
+                                <strong>No taxonomic matches found yet.</strong>
+                                <span>Upload a checklist on the left and run matching to populate this audit grid.</span>
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
+
               </div>
             </section>
 
-            <section class="mapping-panel" id="schema">
-              <div class="panel-title">
-                <h3>Autodetected taxonomy</h3>
-                <span id="schemaBadge">No file</span>
-              </div>
-              <div class="detect-summary" id="detectSummary">
-                <div>
-                  <span class="summary-kicker">Waiting for file</span>
-                  <strong>Upload or load the demo to inspect columns.</strong>
-                </div>
-                <span class="summary-status">Idle</span>
-              </div>
-              <div class="mapping-head" id="mappingHead" hidden>
-                <span>Detected field</span>
-                <span>File column</span>
-                <span>Confidence</span>
-              </div>
-              <div id="mappingList" class="mapping-list">
-                <p class="empty">Upload a file to detect columns and taxonomy structure.</p>
-              </div>
-              <div class="health-list" id="healthList"></div>
-            </section>
           </div>
         </section>
 
-        <section class="results-section">
-          <div class="section-head row">
-            <div>
-              <h2>Results</h2>
-              <p>Review uncertain matches before using the cleaned identifiers downstream.</p>
-            </div>
-            <div class="result-actions">
-              <button class="button secondary" id="downloadButton" disabled>Download CSV</button>
-              <button class="button secondary" id="downloadLocationButton" disabled>Download location CSV</button>
-              <button class="button secondary" id="downloadOccurrencesButton" disabled>Download occurrence CSV</button>
-              <button class="button ghost" id="clearButton" disabled>Clear</button>
-            </div>
-          </div>
-          <div class="filter-row" role="group" aria-label="Result filters">
-            <button class="chip active" data-filter="ALL">All</button>
-            <button class="chip" data-filter="EXACT">Exact</button>
-            <button class="chip" data-filter="FUZZY">Fuzzy</button>
-            <button class="chip" data-filter="HIGHERRANK">Higher rank</button>
-            <button class="chip" data-filter="NONE">None</button>
-            <label class="table-option">
-              <input id="showLocationColumns" type="checkbox" />
-              Show location columns
-            </label>
-          </div>
-          <div class="table-shell">
-            <table>
-              <thead>
-                <tr>
-                  <th>Input name</th>
-                  <th>Match</th>
-                  <th>Type</th>
-                  <th>Confidence</th>
-                  <th>Status</th>
-                  <th>Rank</th>
-                  <th>GBIF key</th>
-                  <th>Wikidata</th>
-                  <th>NCBI IDs</th>
-                  <th>Location</th>
-                  <th class="location-extra" hidden>Nearest</th>
-                  <th class="location-extra" hidden>1 km</th>
-                  <th class="location-extra" hidden>5 km</th>
-                  <th class="location-extra" hidden>10 km</th>
-                  <th class="location-extra" hidden>50 km</th>
-                  <th class="location-extra" hidden>Most recent</th>
-                  <th>Review</th>
-                </tr>
-              </thead>
-              <tbody id="resultsBody">
-                <tr>
-                  <td colspan="11" class="empty-cell">No matches yet.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <aside class="drawer" id="reviewDrawer" aria-hidden="true">
-          <div class="drawer-panel">
-            <button class="drawer-close" id="drawerClose" aria-label="Close review drawer">x</button>
-            <div id="drawerContent"></div>
-          </div>
-        </aside>
-
-        <section class="cli-section" id="notebook">
-          <div>
-            <h2>Notebook and terminal workflow</h2>
+        <!-- Command Line & Developer section -->
+        <section class="cli-documentation-section" id="notebook">
+          <div class="cli-intro">
+            <h2><i data-lucide="terminal"></i> Command-Line & Reproducible Workflows</h2>
             <p>
-              New users can run the Colab notebook without installing anything.
-              Advanced users can run the same matcher from a terminal for large,
-              reproducible batch jobs.
+              GBIF TaxonLens is engineered with deduplicated caching and throttled request queue algorithms. Run large checklists securely via Google Colab or locally in your bash/zsh shell terminal.
             </p>
-            <ul class="workflow-list">
-              <li>Deduplicates repeated names before calling GBIF.</li>
-              <li>Uses a throttled parallel queue for large taxonomy tables.</li>
-              <li>Can export GBIF matches, location summaries, and nearby occurrence records.</li>
+            <ul class="features-list">
+              <li><i data-lucide="check-circle"></i> Deduplicates redundant taxonomic strings before query execution.</li>
+              <li><i data-lucide="check-circle"></i> Protects public GBIF nodes using an asynchronous throttled concurrency pool.</li>
+              <li><i data-lucide="check-circle"></i> Exports discrete location audits and occurrence points directly to standard tidy data sheets.</li>
             </ul>
+            <div class="btn-group-row">
+              <a
+                class="btn btn-primary"
+                href="https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <i data-lucide="external-link"></i> Launch Notebook in Colab
+              </a>
+            </div>
           </div>
-          <div class="notebook-actions">
-            <a
-              class="button primary"
-              href="https://colab.research.google.com/github/UKCEH-MolecularEcology/gbif-taxonlens/blob/main/notebooks/GBIF_TaxonLens_quickstart.ipynb"
-              target="_blank"
-              rel="noreferrer"
-            >Open Colab notebook</a>
-            <div class="command-grid" aria-label="Terminal command examples">
-              <article class="command-card">
-                <span>Quick match</span>
+          
+          <div class="cli-terminal-window">
+            <div class="terminal-header">
+              <span class="terminal-dot red"></span>
+              <span class="terminal-dot yellow"></span>
+              <span class="terminal-dot green"></span>
+              <span class="terminal-title">bash — taxonlens.py examples</span>
+            </div>
+            <div class="terminal-body">
+              <div class="terminal-cmd-card">
+                <span class="cmd-label">Run Standard Checklist Match</span>
                 <pre><code>python3 cli/taxonlens.py input.csv --default-kingdom Plantae --out matched.csv</code></pre>
-              </article>
-              <article class="command-card">
-                <span>Large table</span>
-                <pre><code>python3 cli/taxonlens.py input.csv --concurrency 8 --out matched.csv</code></pre>
-              </article>
-              <article class="command-card wide">
-                <span>Location outputs</span>
+              </div>
+              <div class="terminal-cmd-card">
+                <span class="cmd-label">Run Match with Geographic QA Validation</span>
                 <pre><code>python3 cli/taxonlens.py input.csv --location-check --out matched.csv --location-summary-out locations.csv --occurrences-out occurrences.csv</code></pre>
-              </article>
+              </div>
+              <div class="terminal-cmd-card">
+                <span class="cmd-label">Custom Concurrent Performance</span>
+                <pre><code>python3 cli/taxonlens.py input.csv --concurrency 8 --out matched.csv</code></pre>
+              </div>
             </div>
           </div>
         </section>
       </main>
+
+      <!-- Elegant slide-in Details Drawer -->
+      <aside class="drawer-backdrop" id="reviewDrawer" aria-hidden="true">
+        <div class="drawer-panel">
+          <header class="drawer-header">
+            <div class="drawer-header-title">
+              <span class="drawer-kicker">Taxonomic Review Record</span>
+              <h3 id="drawerTaxonName">Taxon Name</h3>
+            </div>
+            <button class="drawer-close-btn" id="drawerClose" aria-label="Close review drawer">
+              <i data-lucide="x"></i>
+            </button>
+          </header>
+          
+          <div class="drawer-body">
+            <div id="drawerContent">
+              <!-- Rendered dynamically in app.js -->
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Sticky brand footer -->
       <footer class="site-footer">
-        <img
-          src="assets/ukceh/ukceh-logo-white.png"
-          alt="UKCEH"
-        />
-        <span>Built by the Molecular Ecology group.</span>
+        <div class="footer-brand">
+          <img
+            src="assets/ukceh/ukceh-logo-white.png"
+            alt="UKCEH White Logo"
+            class="footer-logo"
+          />
+          <span>Built by the Molecular Ecology Group. Data provided by public GBIF, Wikidata & NCBI APIs.</span>
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/UKCEH-MolecularEcology/gbif-taxonlens" target="_blank" rel="noreferrer">
+            <i data-lucide="github"></i> Repository
+          </a>
+        </div>
       </footer>
     </div>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
+    <!-- Leaflet.js Interactive Mapping CDN -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js CDN for beautiful dashboard analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icon Library -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Core Application Logic -->
     <script src="app.js"></script>
   </body>
 </html>
